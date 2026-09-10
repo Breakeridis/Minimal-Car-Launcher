@@ -24,11 +24,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.core.graphics.drawable.toBitmap
 import com.minimal.carlauncher.data.AppInfo
 import com.minimal.carlauncher.ui.theme.AccentCyan
 import com.minimal.carlauncher.ui.theme.CarBorder
@@ -37,6 +35,7 @@ import com.minimal.carlauncher.ui.theme.CarSurfaceVariant
 import com.minimal.carlauncher.ui.theme.TextMuted
 import com.minimal.carlauncher.ui.theme.TextPrimary
 import com.minimal.carlauncher.ui.theme.TextSecondary
+import com.minimal.carlauncher.util.BitmapHelper
 
 @Composable
 fun BottomDock(
@@ -87,6 +86,7 @@ fun BottomDock(
             verticalAlignment = Alignment.CenterVertically
         ) {
             quickApps.take(6).forEach { app ->
+                val imageBitmap = BitmapHelper.safeDrawableToImageBitmap(app.icon, 72, 72)
                 Box(
                     modifier = Modifier
                         .size(48.dp)
@@ -96,9 +96,9 @@ fun BottomDock(
                         .padding(6.dp),
                     contentAlignment = Alignment.Center
                 ) {
-                    if (app.icon != null) {
+                    if (imageBitmap != null) {
                         Image(
-                            bitmap = app.icon.toBitmap(64, 64).asImageBitmap(),
+                            bitmap = imageBitmap,
                             contentDescription = app.label,
                             modifier = Modifier.size(36.dp)
                         )
@@ -107,7 +107,7 @@ fun BottomDock(
                             text = app.label.take(1).uppercase(),
                             fontSize = 16.sp,
                             fontWeight = FontWeight.Bold,
-                            color = TextSecondary
+                            color = AccentCyan
                         )
                     }
                 }

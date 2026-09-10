@@ -1,10 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <style name="Theme.CarLauncher" parent="android:Theme.Material.NoActionBar.Fullscreen">
+    <style name="Theme.CarLauncher" parent="android:Theme.Material.NoActionBar">
         <item name="android:windowBackground">@color/car_bg</item>
         <item name="android:statusBarColor">@color/car_bg</item>
         <item name="android:navigationBarColor">@color/car_bg</item>
         <item name="android:windowDrawsSystemBarBackgrounds">true</item>
-        <item name="android:windowTranslucentStatus">false</item>
+        <item name="android:windowFullscreen">true</item>
+        <item name="android:windowNoTitle">true</item>
     </style>
 </resources>

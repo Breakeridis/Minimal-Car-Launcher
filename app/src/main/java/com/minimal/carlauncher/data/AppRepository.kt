@@ -47,46 +47,66 @@ class AppRepository(private val context: Context) {
     )
 
     suspend fun getInstalledApps(): List<AppInfo> = withContext(Dispatchers.IO) {
-        val intent = Intent(Intent.ACTION_MAIN, null).apply {
-            addCategory(Intent.CATEGORY_LAUNCHER)
+        try {
+            val intent = Intent(Intent.ACTION_MAIN, null).apply {
+                addCategory(Intent.CATEGORY_LAUNCHER)
+            }
+
+            val resolveInfos: List<ResolveInfo> = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                packageManager.queryIntentActivities(
+                    intent,
+                    PackageManager.ResolveInfoFlags.of(0L)
+                )
+            } else {
+                @Suppress("DEPRECATION")
+                packageManager.queryIntentActivities(intent, 0)
+            }
+
+            val selfPackage = context.packageName
+
+            val apps = resolveInfos.mapNotNull { resolveInfo ->
+                try {
+                    val activityInfo = resolveInfo.activityInfo ?: return@mapNotNull null
+                    val pkg = activityInfo.packageName ?: return@mapNotNull null
+                    if (pkg == selfPackage) return@mapNotNull null
+
+                    val label = try {
+                        resolveInfo.loadLabel(packageManager)?.toString() ?: pkg
+                    } catch (e: Throwable) {
+                        pkg
+                    }
+
+                    val icon = try {
+                        resolveInfo.loadIcon(packageManager)
+                    } catch (e: Throwable) {
+                        null
+                    }
+
+                    val activityName = activityInfo.name ?: ""
+
+                    val isZLink = isZLinkPackage(pkg, label)
+                    val isNav = isNavPackage(pkg, label)
+                    val isMusic = isMusicPackage(pkg, label)
+
+                    AppInfo(
+                        label = label,
+                        packageName = pkg,
+                        activityName = activityName,
+                        icon = icon,
+                        isZLink = isZLink,
+                        isNavigation = isNav,
+                        isMusic = isMusic
+                    )
+                } catch (e: Throwable) {
+                    null
+                }
+            }
+
+            apps.sortedBy { it.label.lowercase() }
+        } catch (e: Throwable) {
+            e.printStackTrace()
+            emptyList()
         }
-
-        val resolveInfos: List<ResolveInfo> = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            packageManager.queryIntentActivities(
-                intent,
-                PackageManager.ResolveInfoFlags.of(0L)
-            )
-        } else {
-            @Suppress("DEPRECATION")
-            packageManager.queryIntentActivities(intent, 0)
-        }
-
-        val selfPackage = context.packageName
-
-        val apps = resolveInfos.mapNotNull { resolveInfo ->
-            val pkg = resolveInfo.activityInfo.packageName
-            if (pkg == selfPackage) return@mapNotNull null
-
-            val label = resolveInfo.loadLabel(packageManager)?.toString() ?: pkg
-            val icon = resolveInfo.loadIcon(packageManager)
-            val activityName = resolveInfo.activityInfo.name
-
-            val isZLink = isZLinkPackage(pkg, label)
-            val isNav = isNavPackage(pkg, label)
-            val isMusic = isMusicPackage(pkg, label)
-
-            AppInfo(
-                label = label,
-                packageName = pkg,
-                activityName = activityName,
-                icon = icon,
-                isZLink = isZLink,
-                isNavigation = isNav,
-                isMusic = isMusic
-            )
-        }
-
-        apps.sortedBy { it.label.lowercase() }
     }
 
     fun isZLinkPackage(pkg: String, label: String = ""): Boolean {
@@ -145,7 +165,7 @@ class AppRepository(private val context: Context) {
 
     fun launchPackageAndActivity(packageName: String, activityName: String? = null): Boolean {
         return try {
-            if (activityName != null) {
+            if (!activityName.isNullOrBlank()) {
                 val intent = Intent(Intent.ACTION_MAIN).apply {
                     component = ComponentName(packageName, activityName)
                     addCategory(Intent.CATEGORY_LAUNCHER)
@@ -157,7 +177,6 @@ class AppRepository(private val context: Context) {
                 launchPackage(packageName)
             }
         } catch (e: Exception) {
-            // Fallback to generic launch intent
             launchPackage(packageName)
         }
     }

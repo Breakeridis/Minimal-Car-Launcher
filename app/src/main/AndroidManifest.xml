@@ -11,7 +11,7 @@
         android:name="android.permission.QUERY_ALL_PACKAGES"
         tools:ignore="QueryAllPackagesPermission" />
 
-    <!-- Non-mandatory hardware features so the APK installs on any head unit -->
+    <!-- Non-mandatory hardware features so the APK installs on any device/head unit -->
     <uses-feature
         android:name="android.hardware.location.gps"
         android:required="false" />
@@ -22,9 +22,9 @@
     <application
         android:name=".CarLauncherApp"
         android:allowBackup="true"
-        android:icon="@drawable/ic_car_launcher"
+        android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
-        android:roundIcon="@drawable/ic_car_launcher"
+        android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/Theme.CarLauncher">
 
@@ -44,6 +44,12 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <activity
+            android:name=".CrashActivity"
+            android:exported="false"
+            android:screenOrientation="sensorLandscape"
+            android:theme="@style/Theme.CarLauncher" />
 
     </application>
 

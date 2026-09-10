@@ -33,8 +33,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -42,7 +40,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
-import androidx.core.graphics.drawable.toBitmap
 import com.minimal.carlauncher.data.AppInfo
 import com.minimal.carlauncher.ui.theme.AccentCyan
 import com.minimal.carlauncher.ui.theme.CarBg
@@ -51,7 +48,7 @@ import com.minimal.carlauncher.ui.theme.CarSurface
 import com.minimal.carlauncher.ui.theme.CarSurfaceVariant
 import com.minimal.carlauncher.ui.theme.TextMuted
 import com.minimal.carlauncher.ui.theme.TextPrimary
-import com.minimal.carlauncher.ui.theme.TextSecondary
+import com.minimal.carlauncher.util.BitmapHelper
 
 @Composable
 fun AppDrawerDialog(
@@ -158,6 +155,8 @@ fun AppGridItem(
     app: AppInfo,
     onClick: () -> Unit
 ) {
+    val imageBitmap = BitmapHelper.safeDrawableToImageBitmap(app.icon, 96, 96)
+
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = Modifier
@@ -174,9 +173,9 @@ fun AppGridItem(
                 .padding(10.dp),
             contentAlignment = Alignment.Center
         ) {
-            if (app.icon != null) {
+            if (imageBitmap != null) {
                 Image(
-                    bitmap = app.icon.toBitmap(96, 96).asImageBitmap(),
+                    bitmap = imageBitmap,
                     contentDescription = app.label,
                     modifier = Modifier.size(48.dp)
                 )
