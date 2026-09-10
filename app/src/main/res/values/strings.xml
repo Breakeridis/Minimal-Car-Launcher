@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Car Launcher</string>
+    <string name="zlink_label">Android Auto</string>
+    <string name="navigation_label">Navigation</string>
+    <string name="music_label">Music</string>
+    <string name="settings_label">Settings</string>
+    <string name="all_apps_label">Apps</string>
+    <string name="unit_kmh">KM/H</string>
+    <string name="unit_mph">MPH</string>
+    <string name="speed_waiting">GPS…</string>
+    <string name="search_apps_placeholder">Search car apps…</string>
+</resources>
