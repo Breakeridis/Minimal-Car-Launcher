@@ -1,9 +1,11 @@
 package com.minimal.carlauncher.ui.drawer
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -57,6 +59,7 @@ fun AppDrawerDialog(
     searchQuery: String,
     onSearchChange: (String) -> Unit,
     onAppClick: (AppInfo) -> Unit,
+    onAppLongClick: (AppInfo) -> Unit,
     onClose: () -> Unit
 ) {
     if (!isOpen) return
@@ -84,9 +87,9 @@ fun AppDrawerDialog(
                         onValueChange = onSearchChange,
                         placeholder = {
                             Text(
-                                text = "Search apps…",
+                                text = "Search apps… (long-press an icon to pin to bottom bar)",
                                 color = TextMuted,
-                                fontSize = 16.sp
+                                fontSize = 15.sp
                             )
                         },
                         leadingIcon = {
@@ -141,7 +144,8 @@ fun AppDrawerDialog(
                     items(apps, key = { it.packageName + it.activityName }) { app ->
                         AppGridItem(
                             app = app,
-                            onClick = { onAppClick(app) }
+                            onClick = { onAppClick(app) },
+                            onLongClick = { onAppLongClick(app) }
                         )
                     }
                 }
@@ -150,10 +154,12 @@ fun AppDrawerDialog(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun AppGridItem(
     app: AppInfo,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    onLongClick: () -> Unit
 ) {
     val imageBitmap = BitmapHelper.safeDrawableToImageBitmap(app.icon, 96, 96)
 
@@ -161,7 +167,10 @@ fun AppGridItem(
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = Modifier
             .clip(RoundedCornerShape(16.dp))
-            .clickable { onClick() }
+            .combinedClickable(
+                onClick = onClick,
+                onLongClick = onLongClick
+            )
             .padding(10.dp)
     ) {
         Box(

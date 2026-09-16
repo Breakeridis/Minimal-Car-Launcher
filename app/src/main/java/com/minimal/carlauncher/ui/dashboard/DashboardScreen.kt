@@ -15,6 +15,10 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.minimal.carlauncher.ui.dialogs.AppPickerDialog
+import com.minimal.carlauncher.ui.dialogs.DockActionDialog
+import com.minimal.carlauncher.ui.dialogs.DrawerActionDialog
+import com.minimal.carlauncher.ui.dialogs.UpdateDialog
 import com.minimal.carlauncher.ui.drawer.AppDrawerDialog
 import com.minimal.carlauncher.ui.theme.CarBg
 import com.minimal.carlauncher.ui.viewmodel.LauncherViewModel
@@ -33,10 +37,21 @@ fun DashboardScreen(
     val isGpsActive by viewModel.speedometer.isGpsActive.collectAsState()
 
     val allApps by viewModel.allApps.collectAsState()
+    val pinnedApps by viewModel.pinnedApps.collectAsState()
     val filteredApps by viewModel.filteredApps.collectAsState()
     val searchQuery by viewModel.searchQuery.collectAsState()
     val isDrawerOpen by viewModel.isAppDrawerOpen.collectAsState()
     val zlinkApp by viewModel.zlinkApp.collectAsState()
+
+    // Dialog States
+    val selectedDockApp by viewModel.selectedDockAppForAction.collectAsState()
+    val isReplacePickerOpen by viewModel.isReplacePickerOpen.collectAsState()
+    val selectedDrawerApp by viewModel.selectedDrawerAppForAction.collectAsState()
+
+    val isCheckingUpdate by viewModel.isCheckingUpdate.collectAsState()
+    val updateInfo by viewModel.updateInfo.collectAsState()
+    val updateProgress by viewModel.updateDownloadProgress.collectAsState()
+    val isUpdateDialogOpen by viewModel.isUpdateDialogOpen.collectAsState()
 
     Box(
         modifier = modifier
@@ -57,8 +72,7 @@ fun DashboardScreen(
             ) {
                 // Left Column: Clock + Speedometer
                 Column(
-                    modifier = Modifier
-                        .weight(1.1f),
+                    modifier = Modifier.weight(1.1f),
                     verticalArrangement = Arrangement.spacedBy(14.dp)
                 ) {
                     ClockWidget(
@@ -94,21 +108,57 @@ fun DashboardScreen(
 
             // Bottom Persistent Dock
             BottomDock(
-                quickApps = allApps,
+                pinnedApps = pinnedApps,
+                isCheckingUpdate = isCheckingUpdate,
                 onOpenAppDrawer = { viewModel.openAppDrawer() },
                 onLaunchApp = { app -> viewModel.launchApp(app) },
+                onLongClickApp = { app -> viewModel.onDockAppLongClick(app) },
+                onCheckUpdate = { viewModel.checkForUpdates(isManualCheck = true) },
                 onOpenSettings = { viewModel.launchSettings() }
             )
         }
 
-        // Overlay App Drawer
+        // Overlay All Apps Drawer
         AppDrawerDialog(
             isOpen = isDrawerOpen,
             apps = filteredApps,
             searchQuery = searchQuery,
             onSearchChange = { viewModel.onSearchQueryChange(it) },
             onAppClick = { app -> viewModel.launchApp(app) },
+            onAppLongClick = { app -> viewModel.onDrawerAppLongClick(app) },
             onClose = { viewModel.closeAppDrawer() }
+        )
+
+        // Dock Long-Press Action Dialog (Remove or Replace)
+        DockActionDialog(
+            app = selectedDockApp,
+            onReplace = { viewModel.openReplacePicker() },
+            onRemove = { selectedDockApp?.let { viewModel.removeDockApp(it) } },
+            onDismiss = { viewModel.dismissDockActionDialog() }
+        )
+
+        // App Picker Dialog (when Replace is chosen)
+        AppPickerDialog(
+            isOpen = isReplacePickerOpen,
+            apps = allApps,
+            onAppSelected = { newApp -> viewModel.replaceDockAppWith(newApp) },
+            onDismiss = { viewModel.closeReplacePicker() }
+        )
+
+        // Drawer Long-Press Action Dialog (Add to Bottom Bar)
+        DrawerActionDialog(
+            app = selectedDrawerApp,
+            onAddToDock = { selectedDrawerApp?.let { viewModel.pinDrawerAppToDock(it) } },
+            onDismiss = { viewModel.dismissDrawerActionDialog() }
+        )
+
+        // In-App GitHub Update Dialog
+        UpdateDialog(
+            isOpen = isUpdateDialogOpen,
+            updateInfo = updateInfo,
+            downloadProgress = updateProgress,
+            onInstall = { viewModel.startDownloadAndInstall() },
+            onDismiss = { viewModel.dismissUpdateDialog() }
         )
     }
 }

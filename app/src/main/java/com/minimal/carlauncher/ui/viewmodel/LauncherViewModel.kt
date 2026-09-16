@@ -1,12 +1,14 @@
 package com.minimal.carlauncher.ui.viewmodel
 
 import android.app.Application
+import android.widget.Toast
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.minimal.carlauncher.data.AppInfo
 import com.minimal.carlauncher.data.AppRepository
-import com.minimal.carlauncher.service.SpeedUnit
 import com.minimal.carlauncher.service.SpeedometerManager
+import com.minimal.carlauncher.service.UpdateInfo
+import com.minimal.carlauncher.service.UpdateManager
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -24,10 +26,14 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
 
     private val repository = AppRepository(application)
     val speedometer = SpeedometerManager(application)
+    private val updateManager = UpdateManager(application)
 
     // Applications State
     private val _allApps = MutableStateFlow<List<AppInfo>>(emptyList())
     val allApps: StateFlow<List<AppInfo>> = _allApps.asStateFlow()
+
+    private val _pinnedApps = MutableStateFlow<List<AppInfo>>(emptyList())
+    val pinnedApps: StateFlow<List<AppInfo>> = _pinnedApps.asStateFlow()
 
     private val _searchQuery = MutableStateFlow("")
     val searchQuery: StateFlow<String> = _searchQuery.asStateFlow()
@@ -62,6 +68,29 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
     private val _currentDate = MutableStateFlow("")
     val currentDate: StateFlow<String> = _currentDate.asStateFlow()
 
+    // Long press action dialog states
+    private val _selectedDockAppForAction = MutableStateFlow<AppInfo?>(null)
+    val selectedDockAppForAction: StateFlow<AppInfo?> = _selectedDockAppForAction.asStateFlow()
+
+    private val _isReplacePickerOpen = MutableStateFlow(false)
+    val isReplacePickerOpen: StateFlow<Boolean> = _isReplacePickerOpen.asStateFlow()
+
+    private val _selectedDrawerAppForAction = MutableStateFlow<AppInfo?>(null)
+    val selectedDrawerAppForAction: StateFlow<AppInfo?> = _selectedDrawerAppForAction.asStateFlow()
+
+    // In-App Updater State
+    private val _isCheckingUpdate = MutableStateFlow(false)
+    val isCheckingUpdate: StateFlow<Boolean> = _isCheckingUpdate.asStateFlow()
+
+    private val _updateInfo = MutableStateFlow<UpdateInfo?>(null)
+    val updateInfo: StateFlow<UpdateInfo?> = _updateInfo.asStateFlow()
+
+    private val _updateDownloadProgress = MutableStateFlow<Int?>(null)
+    val updateDownloadProgress: StateFlow<Int?> = _updateDownloadProgress.asStateFlow()
+
+    private val _isUpdateDialogOpen = MutableStateFlow(false)
+    val isUpdateDialogOpen: StateFlow<Boolean> = _isUpdateDialogOpen.asStateFlow()
+
     init {
         loadApps()
         startClockTicker()
@@ -71,6 +100,9 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
         viewModelScope.launch {
             val apps = repository.getInstalledApps()
             _allApps.value = apps
+
+            // Load or initialize pinned dock apps
+            _pinnedApps.value = repository.getPinnedApps(apps)
 
             // Auto-detect key apps
             _zlinkApp.value = apps.firstOrNull { it.isZLink }
@@ -114,19 +146,117 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
         closeAppDrawer()
     }
 
+    // --- Dock Customization ---
+
+    fun onDockAppLongClick(app: AppInfo) {
+        _selectedDockAppForAction.value = app
+    }
+
+    fun dismissDockActionDialog() {
+        _selectedDockAppForAction.value = null
+    }
+
+    fun removeDockApp(app: AppInfo) {
+        repository.removePinnedApp(_allApps.value, app)
+        _pinnedApps.value = repository.getPinnedApps(_allApps.value)
+        _selectedDockAppForAction.value = null
+        Toast.makeText(getApplication(), "Removed from bottom bar", Toast.LENGTH_SHORT).show()
+    }
+
+    fun openReplacePicker() {
+        _isReplacePickerOpen.value = true
+    }
+
+    fun closeReplacePicker() {
+        _isReplacePickerOpen.value = false
+        _selectedDockAppForAction.value = null
+    }
+
+    fun replaceDockAppWith(newApp: AppInfo) {
+        val oldApp = _selectedDockAppForAction.value ?: return
+        repository.replacePinnedApp(_allApps.value, oldApp, newApp)
+        _pinnedApps.value = repository.getPinnedApps(_allApps.value)
+        _isReplacePickerOpen.value = false
+        _selectedDockAppForAction.value = null
+        Toast.makeText(getApplication(), "Replaced with ${newApp.label}", Toast.LENGTH_SHORT).show()
+    }
+
+    // --- Drawer Long Press to Pin ---
+
+    fun onDrawerAppLongClick(app: AppInfo) {
+        _selectedDrawerAppForAction.value = app
+    }
+
+    fun dismissDrawerActionDialog() {
+        _selectedDrawerAppForAction.value = null
+    }
+
+    fun pinDrawerAppToDock(app: AppInfo) {
+        val added = repository.addPinnedApp(_allApps.value, app)
+        _pinnedApps.value = repository.getPinnedApps(_allApps.value)
+        _selectedDrawerAppForAction.value = null
+        if (added) {
+            Toast.makeText(getApplication(), "Added ${app.label} to bottom bar", Toast.LENGTH_SHORT).show()
+        } else {
+            Toast.makeText(getApplication(), "${app.label} is already in the bottom bar", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    // --- In-App GitHub Updater ---
+
+    fun checkForUpdates(isManualCheck: Boolean = true) {
+        viewModelScope.launch {
+            _isCheckingUpdate.value = true
+            val release = updateManager.checkLatestRelease()
+            _isCheckingUpdate.value = false
+
+            if (release != null) {
+                _updateInfo.value = release
+                _isUpdateDialogOpen.value = true
+            } else if (isManualCheck) {
+                Toast.makeText(getApplication(), "No updates found on GitHub", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    fun startDownloadAndInstall() {
+        val info = _updateInfo.value ?: return
+        viewModelScope.launch {
+            _updateDownloadProgress.value = 0
+            val downloadedFile = updateManager.downloadApk(info.apkDownloadUrl) { progress ->
+                _updateDownloadProgress.value = progress
+            }
+
+            if (downloadedFile != null && downloadedFile.exists()) {
+                _updateDownloadProgress.value = null
+                _isUpdateDialogOpen.value = false
+                updateManager.promptInstall(downloadedFile)
+            } else {
+                _updateDownloadProgress.value = null
+                Toast.makeText(getApplication(), "Download failed. Please check internet connection.", Toast.LENGTH_LONG).show()
+            }
+        }
+    }
+
+    fun dismissUpdateDialog() {
+        if (_updateDownloadProgress.value == null) {
+            _isUpdateDialogOpen.value = false
+        }
+    }
+
+    // --- Other Shortcuts ---
+
     fun launchZLink() {
         val zlink = _zlinkApp.value
         if (zlink != null) {
             repository.launchApp(zlink)
         } else {
-            // Fallback: try common ZLink package names directly
             val launched = repository.launchPackage("com.zjinnova.zlink") ||
                     repository.launchPackage("com.zjinnova.zlinkx") ||
                     repository.launchPackage("com.xyauto.zlink") ||
                     repository.launchPackage("com.carletter.zlink") ||
                     repository.launchPackage("com.suding.speedplay")
             if (!launched) {
-                // Open app drawer so user can locate their mirror app
                 openAppDrawer()
             }
         }
@@ -137,7 +267,6 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
         if (nav != null) {
             repository.launchApp(nav)
         } else {
-            // Attempt generic Google Maps or open drawer
             if (!repository.launchPackage("com.google.android.apps.maps")) {
                 openAppDrawer()
             }

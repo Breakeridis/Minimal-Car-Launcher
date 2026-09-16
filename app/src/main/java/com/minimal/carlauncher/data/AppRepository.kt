@@ -3,16 +3,25 @@ package com.minimal.carlauncher.data
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.content.SharedPreferences
 import android.content.pm.PackageManager
 import android.content.pm.ResolveInfo
 import android.os.Build
 import android.widget.Toast
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import org.json.JSONArray
 
 class AppRepository(private val context: Context) {
 
     private val packageManager: PackageManager = context.packageManager
+    private val prefs: SharedPreferences =
+        context.getSharedPreferences("car_launcher_dock_prefs", Context.MODE_PRIVATE)
+
+    companion object {
+        private const val KEY_PINNED_PACKAGES = "key_pinned_dock_packages"
+        const val MAX_DOCK_APPS = 6
+    }
 
     // Known ZLink package signatures found on Android head units
     private val zlinkPackages = setOf(
@@ -108,6 +117,88 @@ class AppRepository(private val context: Context) {
             emptyList()
         }
     }
+
+    // --- Dock Persistence ---
+
+    fun getPinnedPackageNames(): List<String> {
+        val jsonString = prefs.getString(KEY_PINNED_PACKAGES, null) ?: return emptyList()
+        return try {
+            val jsonArray = JSONArray(jsonString)
+            val list = mutableListOf<String>()
+            for (i in 0 until jsonArray.length()) {
+                list.add(jsonArray.getString(i))
+            }
+            list
+        } catch (e: Exception) {
+            emptyList()
+        }
+    }
+
+    fun savePinnedPackageNames(packages: List<String>) {
+        val jsonArray = JSONArray(packages)
+        prefs.edit().putString(KEY_PINNED_PACKAGES, jsonArray.toString()).apply()
+    }
+
+    fun getPinnedApps(allApps: List<AppInfo>): List<AppInfo> {
+        val saved = getPinnedPackageNames()
+        if (saved.isNotEmpty()) {
+            val appMap = allApps.associateBy { it.packageName }
+            return saved.mapNotNull { appMap[it] }
+        }
+
+        // First launch default: pick up to MAX_DOCK_APPS
+        val defaults = mutableListOf<AppInfo>()
+        val nav = allApps.firstOrNull { it.isNavigation }
+        val music = allApps.firstOrNull { it.isMusic }
+        val zlink = allApps.firstOrNull { it.isZLink }
+
+        if (nav != null) defaults.add(nav)
+        if (music != null && !defaults.contains(music)) defaults.add(music)
+        if (zlink != null && !defaults.contains(zlink)) defaults.add(zlink)
+
+        for (app in allApps) {
+            if (defaults.size >= MAX_DOCK_APPS) break
+            if (!defaults.contains(app)) {
+                defaults.add(app)
+            }
+        }
+
+        savePinnedPackageNames(defaults.map { it.packageName })
+        return defaults
+    }
+
+    fun addPinnedApp(allApps: List<AppInfo>, newApp: AppInfo): Boolean {
+        val current = getPinnedApps(allApps).toMutableList()
+        if (current.any { it.packageName == newApp.packageName }) {
+            return false // Already pinned
+        }
+        if (current.size >= MAX_DOCK_APPS) {
+            // Drop last or refuse if full
+            current.removeAt(current.size - 1)
+        }
+        current.add(newApp)
+        savePinnedPackageNames(current.map { it.packageName })
+        return true
+    }
+
+    fun removePinnedApp(allApps: List<AppInfo>, appToRemove: AppInfo) {
+        val current = getPinnedApps(allApps).toMutableList()
+        current.removeAll { it.packageName == appToRemove.packageName }
+        savePinnedPackageNames(current.map { it.packageName })
+    }
+
+    fun replacePinnedApp(allApps: List<AppInfo>, oldApp: AppInfo, newApp: AppInfo) {
+        val current = getPinnedApps(allApps).toMutableList()
+        val index = current.indexOfFirst { it.packageName == oldApp.packageName }
+        if (index != -1) {
+            current[index] = newApp
+        } else {
+            current.add(newApp)
+        }
+        savePinnedPackageNames(current.map { it.packageName })
+    }
+
+    // --- Package Helpers ---
 
     fun isZLinkPackage(pkg: String, label: String = ""): Boolean {
         val lowerPkg = pkg.lowercase()
