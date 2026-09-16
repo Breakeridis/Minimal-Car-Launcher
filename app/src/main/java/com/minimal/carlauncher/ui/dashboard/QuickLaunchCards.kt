@@ -1,8 +1,10 @@
 package com.minimal.carlauncher.ui.dashboard
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -35,6 +37,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.minimal.carlauncher.data.AppInfo
 import com.minimal.carlauncher.ui.theme.AccentBlue
 import com.minimal.carlauncher.ui.theme.AccentCyan
 import com.minimal.carlauncher.ui.theme.AccentGreen
@@ -49,10 +52,14 @@ import com.minimal.carlauncher.ui.theme.TextSecondary
 @Composable
 fun QuickLaunchCards(
     zlinkLabel: String,
+    navApp: AppInfo?,
+    musicApp: AppInfo?,
     onLaunchZLink: () -> Unit,
     onLaunchNavigation: () -> Unit,
     onLaunchMusic: () -> Unit,
     onLaunchSettings: () -> Unit,
+    onLongClickNavigation: () -> Unit,
+    onLongClickMusic: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     Row(
@@ -73,19 +80,21 @@ fun QuickLaunchCards(
         ) {
             ActionTile(
                 title = "Navigation",
-                subtitle = "Google Maps / GPS",
+                subtitle = navApp?.label ?: "Google Maps / GPS",
                 icon = Icons.Default.Navigation,
                 accentColor = AccentBlue,
                 onClick = onLaunchNavigation,
+                onLongClick = onLongClickNavigation,
                 modifier = Modifier.weight(1f)
             )
 
             ActionTile(
                 title = "Music",
-                subtitle = "Audio & Streaming",
+                subtitle = musicApp?.label ?: "Audio & Streaming",
                 icon = Icons.Default.MusicNote,
                 accentColor = AccentCyan,
                 onClick = onLaunchMusic,
+                onLongClick = onLongClickMusic,
                 modifier = Modifier.weight(1f)
             )
 
@@ -182,6 +191,7 @@ fun ZLinkHeroCard(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun ActionTile(
     title: String,
@@ -189,6 +199,7 @@ fun ActionTile(
     icon: ImageVector,
     accentColor: Color,
     onClick: () -> Unit,
+    onLongClick: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     Row(
@@ -197,7 +208,10 @@ fun ActionTile(
             .clip(RoundedCornerShape(16.dp))
             .background(CarSurface)
             .border(1.dp, CarBorder.copy(alpha = 0.5f), RoundedCornerShape(16.dp))
-            .clickable { onClick() }
+            .combinedClickable(
+                onClick = onClick,
+                onLongClick = onLongClick
+            )
             .padding(horizontal = 18.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {

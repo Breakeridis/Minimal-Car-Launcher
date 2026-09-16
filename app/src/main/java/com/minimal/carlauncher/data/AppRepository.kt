@@ -20,6 +20,8 @@ class AppRepository(private val context: Context) {
 
     companion object {
         private const val KEY_PINNED_PACKAGES = "key_pinned_dock_packages"
+        private const val KEY_CUSTOM_NAV_PACKAGE = "key_custom_nav_package"
+        private const val KEY_CUSTOM_MUSIC_PACKAGE = "key_custom_music_package"
         const val MAX_DOCK_APPS = 6
     }
 
@@ -196,6 +198,38 @@ class AppRepository(private val context: Context) {
             current.add(newApp)
         }
         savePinnedPackageNames(current.map { it.packageName })
+    }
+
+    // --- Custom Navigation & Music Preferences ---
+
+    fun getCustomNavPackage(): String? = prefs.getString(KEY_CUSTOM_NAV_PACKAGE, null)
+
+    fun setCustomNavPackage(packageName: String) {
+        prefs.edit().putString(KEY_CUSTOM_NAV_PACKAGE, packageName).apply()
+    }
+
+    fun getCustomMusicPackage(): String? = prefs.getString(KEY_CUSTOM_MUSIC_PACKAGE, null)
+
+    fun setCustomMusicPackage(packageName: String) {
+        prefs.edit().putString(KEY_CUSTOM_MUSIC_PACKAGE, packageName).apply()
+    }
+
+    fun resolveNavApp(allApps: List<AppInfo>): AppInfo? {
+        val customPkg = getCustomNavPackage()
+        if (!customPkg.isNullOrBlank()) {
+            val found = allApps.firstOrNull { it.packageName == customPkg }
+            if (found != null) return found
+        }
+        return allApps.firstOrNull { it.isNavigation }
+    }
+
+    fun resolveMusicApp(allApps: List<AppInfo>): AppInfo? {
+        val customPkg = getCustomMusicPackage()
+        if (!customPkg.isNullOrBlank()) {
+            val found = allApps.firstOrNull { it.packageName == customPkg }
+            if (found != null) return found
+        }
+        return allApps.firstOrNull { it.isMusic }
     }
 
     // --- Package Helpers ---

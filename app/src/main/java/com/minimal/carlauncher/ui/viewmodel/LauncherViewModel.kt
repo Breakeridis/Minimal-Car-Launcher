@@ -78,6 +78,12 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
     private val _selectedDrawerAppForAction = MutableStateFlow<AppInfo?>(null)
     val selectedDrawerAppForAction: StateFlow<AppInfo?> = _selectedDrawerAppForAction.asStateFlow()
 
+    private val _isNavPickerOpen = MutableStateFlow(false)
+    val isNavPickerOpen: StateFlow<Boolean> = _isNavPickerOpen.asStateFlow()
+
+    private val _isMusicPickerOpen = MutableStateFlow(false)
+    val isMusicPickerOpen: StateFlow<Boolean> = _isMusicPickerOpen.asStateFlow()
+
     // In-App Updater State
     private val _isCheckingUpdate = MutableStateFlow(false)
     val isCheckingUpdate: StateFlow<Boolean> = _isCheckingUpdate.asStateFlow()
@@ -104,10 +110,10 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
             // Load or initialize pinned dock apps
             _pinnedApps.value = repository.getPinnedApps(apps)
 
-            // Auto-detect key apps
+            // Auto-detect or resolve user-customized key apps
             _zlinkApp.value = apps.firstOrNull { it.isZLink }
-            _navigationApp.value = apps.firstOrNull { it.isNavigation }
-            _musicApp.value = apps.firstOrNull { it.isMusic }
+            _navigationApp.value = repository.resolveNavApp(apps)
+            _musicApp.value = repository.resolveMusicApp(apps)
         }
     }
 
@@ -200,6 +206,38 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
         } else {
             Toast.makeText(getApplication(), "${app.label} is already in the bottom bar", Toast.LENGTH_SHORT).show()
         }
+    }
+
+    // --- Navigation & Music Customization ---
+
+    fun openNavPicker() {
+        _isNavPickerOpen.value = true
+    }
+
+    fun closeNavPicker() {
+        _isNavPickerOpen.value = false
+    }
+
+    fun selectNavigationApp(app: AppInfo) {
+        repository.setCustomNavPackage(app.packageName)
+        _navigationApp.value = app
+        _isNavPickerOpen.value = false
+        Toast.makeText(getApplication(), "Navigation set to ${app.label}", Toast.LENGTH_SHORT).show()
+    }
+
+    fun openMusicPicker() {
+        _isMusicPickerOpen.value = true
+    }
+
+    fun closeMusicPicker() {
+        _isMusicPickerOpen.value = false
+    }
+
+    fun selectMusicApp(app: AppInfo) {
+        repository.setCustomMusicPackage(app.packageName)
+        _musicApp.value = app
+        _isMusicPickerOpen.value = false
+        Toast.makeText(getApplication(), "Music player set to ${app.label}", Toast.LENGTH_SHORT).show()
     }
 
     // --- In-App GitHub Updater ---

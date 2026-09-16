@@ -42,11 +42,15 @@ fun DashboardScreen(
     val searchQuery by viewModel.searchQuery.collectAsState()
     val isDrawerOpen by viewModel.isAppDrawerOpen.collectAsState()
     val zlinkApp by viewModel.zlinkApp.collectAsState()
+    val navigationApp by viewModel.navigationApp.collectAsState()
+    val musicApp by viewModel.musicApp.collectAsState()
 
     // Dialog States
     val selectedDockApp by viewModel.selectedDockAppForAction.collectAsState()
     val isReplacePickerOpen by viewModel.isReplacePickerOpen.collectAsState()
     val selectedDrawerApp by viewModel.selectedDrawerAppForAction.collectAsState()
+    val isNavPickerOpen by viewModel.isNavPickerOpen.collectAsState()
+    val isMusicPickerOpen by viewModel.isMusicPickerOpen.collectAsState()
 
     val isCheckingUpdate by viewModel.isCheckingUpdate.collectAsState()
     val updateInfo by viewModel.updateInfo.collectAsState()
@@ -96,10 +100,14 @@ fun DashboardScreen(
                 // Right Column: Hero Quick-Launch Cards (ZLink, Nav, Music, Settings)
                 QuickLaunchCards(
                     zlinkLabel = zlinkApp?.label ?: "ZLink",
+                    navApp = navigationApp,
+                    musicApp = musicApp,
                     onLaunchZLink = { viewModel.launchZLink() },
                     onLaunchNavigation = { viewModel.launchNavigation() },
                     onLaunchMusic = { viewModel.launchMusic() },
                     onLaunchSettings = { viewModel.launchSettings() },
+                    onLongClickNavigation = { viewModel.openNavPicker() },
+                    onLongClickMusic = { viewModel.openMusicPicker() },
                     modifier = Modifier.weight(2f)
                 )
             }
@@ -137,12 +145,31 @@ fun DashboardScreen(
             onDismiss = { viewModel.dismissDockActionDialog() }
         )
 
-        // App Picker Dialog (when Replace is chosen)
+        // App Picker Dialog (when Replace is chosen for dock)
         AppPickerDialog(
             isOpen = isReplacePickerOpen,
             apps = allApps,
+            title = "Choose App to Place in Bottom Bar",
             onAppSelected = { newApp -> viewModel.replaceDockAppWith(newApp) },
             onDismiss = { viewModel.closeReplacePicker() }
+        )
+
+        // Navigation App Picker Dialog (when Navigation tile is long-pressed)
+        AppPickerDialog(
+            isOpen = isNavPickerOpen,
+            apps = allApps,
+            title = "Select Default Navigation App",
+            onAppSelected = { app -> viewModel.selectNavigationApp(app) },
+            onDismiss = { viewModel.closeNavPicker() }
+        )
+
+        // Music App Picker Dialog (when Music tile is long-pressed)
+        AppPickerDialog(
+            isOpen = isMusicPickerOpen,
+            apps = allApps,
+            title = "Select Default Music App",
+            onAppSelected = { app -> viewModel.selectMusicApp(app) },
+            onDismiss = { viewModel.closeMusicPicker() }
         )
 
         // Drawer Long-Press Action Dialog (Add to Bottom Bar)

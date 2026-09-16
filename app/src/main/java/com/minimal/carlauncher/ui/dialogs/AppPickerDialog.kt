@@ -58,6 +58,7 @@ import com.minimal.carlauncher.util.BitmapHelper
 fun AppPickerDialog(
     isOpen: Boolean,
     apps: List<AppInfo>,
+    title: String = "Choose App to Place in Bottom Bar",
     onAppSelected: (AppInfo) -> Unit,
     onDismiss: () -> Unit
 ) {
@@ -85,7 +86,7 @@ fun AppPickerDialog(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "Choose App to Place in Bottom Bar",
+                        text = title,
                         fontSize = 20.sp,
                         fontWeight = FontWeight.Bold,
                         color = TextPrimary,
