@@ -122,7 +122,8 @@ fun DashboardScreen(
                 onLaunchApp = { app -> viewModel.launchApp(app) },
                 onLongClickApp = { app -> viewModel.onDockAppLongClick(app) },
                 onOpenAbout = { viewModel.openAboutDialog() },
-                onOpenSettings = { viewModel.launchSettings() }
+                onOpenSettings = { viewModel.launchSettings() },
+                isUpdateAvailable = updateInfo?.isUpdateAvailable == true
             )
         }
 

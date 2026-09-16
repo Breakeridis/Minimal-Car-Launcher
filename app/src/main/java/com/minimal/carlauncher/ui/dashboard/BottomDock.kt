@@ -49,6 +49,7 @@ fun BottomDock(
     onLongClickApp: (AppInfo) -> Unit,
     onOpenAbout: () -> Unit,
     onOpenSettings: () -> Unit,
+    isUpdateAvailable: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     Row(
@@ -143,6 +144,17 @@ fun BottomDock(
                     tint = AccentCyan,
                     modifier = Modifier.size(22.dp)
                 )
+                if (isUpdateAvailable) {
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .padding(top = 4.dp, end = 4.dp)
+                            .size(9.dp)
+                            .clip(CircleShape)
+                            .background(AccentCyan)
+                            .border(1.5.dp, CarSurfaceVariant, CircleShape)
+                    )
+                }
             }
 
             // System Settings Button
