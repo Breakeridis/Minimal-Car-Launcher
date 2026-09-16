@@ -44,6 +44,7 @@ fun DashboardScreen(
     val zlinkApp by viewModel.zlinkApp.collectAsState()
     val navigationApp by viewModel.navigationApp.collectAsState()
     val musicApp by viewModel.musicApp.collectAsState()
+    val dvrApp by viewModel.dvrApp.collectAsState()
 
     // Dialog States
     val selectedDockApp by viewModel.selectedDockAppForAction.collectAsState()
@@ -51,6 +52,7 @@ fun DashboardScreen(
     val selectedDrawerApp by viewModel.selectedDrawerAppForAction.collectAsState()
     val isNavPickerOpen by viewModel.isNavPickerOpen.collectAsState()
     val isMusicPickerOpen by viewModel.isMusicPickerOpen.collectAsState()
+    val isDvrPickerOpen by viewModel.isDvrPickerOpen.collectAsState()
 
     val currentVersion = viewModel.currentVersion
     val isAboutDialogOpen by viewModel.isAboutDialogOpen.collectAsState()
@@ -98,15 +100,17 @@ fun DashboardScreen(
                     )
                 }
 
-                // Right Column: Hero Quick-Launch Cards (ZLink, Nav, Music, Settings)
+                // Right Column: Hero Quick-Launch Cards (DVR, ZLink, Nav, Music)
                 QuickLaunchCards(
+                    dvrApp = dvrApp,
                     zlinkLabel = zlinkApp?.label ?: "ZLink",
                     navApp = navigationApp,
                     musicApp = musicApp,
+                    onLaunchDvr = { viewModel.launchDvr() },
+                    onLongClickDvr = { viewModel.openDvrPicker() },
                     onLaunchZLink = { viewModel.launchZLink() },
                     onLaunchNavigation = { viewModel.launchNavigation() },
                     onLaunchMusic = { viewModel.launchMusic() },
-                    onLaunchSettings = { viewModel.launchSettings() },
                     onLongClickNavigation = { viewModel.openNavPicker() },
                     onLongClickMusic = { viewModel.openMusicPicker() },
                     modifier = Modifier.weight(2f)
@@ -171,6 +175,15 @@ fun DashboardScreen(
             title = "Select Default Music App",
             onAppSelected = { app -> viewModel.selectMusicApp(app) },
             onDismiss = { viewModel.closeMusicPicker() }
+        )
+
+        // Dashcam / DVR App Picker Dialog (when Dashcam card is long-pressed)
+        AppPickerDialog(
+            isOpen = isDvrPickerOpen,
+            apps = allApps,
+            title = "Select Dashcam / DVR App",
+            onAppSelected = { app -> viewModel.selectDvrApp(app) },
+            onDismiss = { viewModel.closeDvrPicker() }
         )
 
         // Drawer Long-Press Action Dialog (Add to Bottom Bar)

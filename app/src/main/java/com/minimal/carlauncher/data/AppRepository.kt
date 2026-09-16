@@ -22,6 +22,8 @@ class AppRepository(private val context: Context) {
         private const val KEY_PINNED_PACKAGES = "key_pinned_dock_packages"
         private const val KEY_CUSTOM_NAV_PACKAGE = "key_custom_nav_package"
         private const val KEY_CUSTOM_MUSIC_PACKAGE = "key_custom_music_package"
+        private const val KEY_CUSTOM_DVR_PACKAGE = "key_custom_dvr_package"
+        private const val KEY_DVR_AUTOSTART_ENABLED = "key_dvr_autostart_enabled"
         const val MAX_DOCK_APPS = 6
     }
 
@@ -55,6 +57,24 @@ class AppRepository(private val context: Context) {
         "deezer.android.app",
         "com.soundcloud.android",
         "com.pandora.android"
+    )
+
+    // Known dashcam / DVR packages found on Android head units
+    private val dvrPackages = setOf(
+        "com.car.dvr",
+        "com.android.dvr",
+        "com.xyauto.dvr",
+        "com.syu.dvr",
+        "com.topway.dvr",
+        "com.teyes.dvr",
+        "com.hcn.dvr",
+        "com.autonavi.dvr",
+        "com.tchip.weatherstation",
+        "com.anket.dvr",
+        "com.mediatek.dvr",
+        "com.allwinner.dvr",
+        "com.cardvr",
+        "com.camera.dvr"
     )
 
     suspend fun getInstalledApps(): List<AppInfo> = withContext(Dispatchers.IO) {
@@ -98,6 +118,7 @@ class AppRepository(private val context: Context) {
                     val isZLink = isZLinkPackage(pkg, label)
                     val isNav = isNavPackage(pkg, label)
                     val isMusic = isMusicPackage(pkg, label)
+                    val isDvr = isDvrPackage(pkg, label)
 
                     AppInfo(
                         label = label,
@@ -106,7 +127,8 @@ class AppRepository(private val context: Context) {
                         icon = icon,
                         isZLink = isZLink,
                         isNavigation = isNav,
-                        isMusic = isMusic
+                        isMusic = isMusic,
+                        isDvr = isDvr
                     )
                 } catch (e: Throwable) {
                     null
@@ -232,6 +254,27 @@ class AppRepository(private val context: Context) {
         return allApps.firstOrNull { it.isMusic }
     }
 
+    fun getCustomDvrPackage(): String? = prefs.getString(KEY_CUSTOM_DVR_PACKAGE, null)
+
+    fun setCustomDvrPackage(packageName: String) {
+        prefs.edit().putString(KEY_CUSTOM_DVR_PACKAGE, packageName).apply()
+    }
+
+    fun isDvrAutoStartEnabled(): Boolean = prefs.getBoolean(KEY_DVR_AUTOSTART_ENABLED, true)
+
+    fun setDvrAutoStartEnabled(enabled: Boolean) {
+        prefs.edit().putBoolean(KEY_DVR_AUTOSTART_ENABLED, enabled).apply()
+    }
+
+    fun resolveDvrApp(allApps: List<AppInfo>): AppInfo? {
+        val customPkg = getCustomDvrPackage()
+        if (!customPkg.isNullOrBlank()) {
+            val found = allApps.firstOrNull { it.packageName == customPkg }
+            if (found != null) return found
+        }
+        return allApps.firstOrNull { it.isDvr }
+    }
+
     // --- Package Helpers ---
 
     fun isZLinkPackage(pkg: String, label: String = ""): Boolean {
@@ -266,6 +309,19 @@ class AppRepository(private val context: Context) {
                 lowerPkg.contains("audio") ||
                 lowerLabel.contains("music") ||
                 lowerLabel.contains("spotify")
+    }
+
+    fun isDvrPackage(pkg: String, label: String = ""): Boolean {
+        val lowerPkg = pkg.lowercase()
+        val lowerLabel = label.lowercase()
+        return dvrPackages.contains(pkg) ||
+                lowerPkg.contains(".dvr") ||
+                lowerPkg.endsWith("dvr") ||
+                lowerPkg.contains("dashcam") ||
+                lowerPkg.contains("carcamera") ||
+                lowerLabel == "dvr" ||
+                lowerLabel.contains("dvr") ||
+                lowerLabel.contains("dashcam")
     }
 
     fun launchApp(appInfo: AppInfo): Boolean {

@@ -25,6 +25,7 @@ import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Navigation
 import androidx.compose.material.icons.filled.PhoneAndroid
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -51,13 +52,15 @@ import com.minimal.carlauncher.ui.theme.TextSecondary
 
 @Composable
 fun QuickLaunchCards(
+    dvrApp: AppInfo?,
     zlinkLabel: String,
     navApp: AppInfo?,
     musicApp: AppInfo?,
+    onLaunchDvr: () -> Unit,
+    onLongClickDvr: () -> Unit,
     onLaunchZLink: () -> Unit,
     onLaunchNavigation: () -> Unit,
     onLaunchMusic: () -> Unit,
-    onLaunchSettings: () -> Unit,
     onLongClickNavigation: () -> Unit,
     onLongClickMusic: () -> Unit,
     modifier: Modifier = Modifier
@@ -66,18 +69,32 @@ fun QuickLaunchCards(
         modifier = modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        // Hero ZLink / Android Auto Card (Takes 50% width)
-        ZLinkHeroCard(
-            label = zlinkLabel,
-            onClick = onLaunchZLink,
-            modifier = Modifier.weight(1.3f).fillMaxHeight()
+        // Hero Dashcam / DVR Card (Takes 55% width)
+        DvrHeroCard(
+            dvrApp = dvrApp,
+            onClick = onLaunchDvr,
+            onLongClick = onLongClickDvr,
+            modifier = Modifier
+                .weight(1.3f)
+                .fillMaxHeight()
         )
 
-        // Right Column: Navigation, Music, Settings
+        // Right Column: Phone Projection (ZLink), Navigation, Music
         Column(
-            modifier = Modifier.weight(1f).fillMaxHeight(),
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxHeight(),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
+            ActionTile(
+                title = "Phone Projection",
+                subtitle = zlinkLabel,
+                icon = Icons.Default.DirectionsCar,
+                accentColor = AccentZLink,
+                onClick = onLaunchZLink,
+                modifier = Modifier.weight(1f)
+            )
+
             ActionTile(
                 title = "Navigation",
                 subtitle = navApp?.label ?: "Google Maps / GPS",
@@ -97,28 +114,21 @@ fun QuickLaunchCards(
                 onLongClick = onLongClickMusic,
                 modifier = Modifier.weight(1f)
             )
-
-            ActionTile(
-                title = "Car Settings",
-                subtitle = "System & Display",
-                icon = Icons.Default.Settings,
-                accentColor = TextSecondary,
-                onClick = onLaunchSettings,
-                modifier = Modifier.weight(1f)
-            )
         }
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-fun ZLinkHeroCard(
-    label: String,
+fun DvrHeroCard(
+    dvrApp: AppInfo?,
     onClick: () -> Unit,
+    onLongClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val gradientBrush = Brush.linearGradient(
         colors = listOf(
-            Color(0xFF064E3B), // Deep emerald
+            Color(0xFF0F172A), // Deep cockpit slate
             CarSurface
         )
     )
@@ -127,14 +137,18 @@ fun ZLinkHeroCard(
         modifier = modifier
             .clip(RoundedCornerShape(22.dp))
             .background(gradientBrush)
-            .border(1.5.dp, AccentZLink.copy(alpha = 0.6f), RoundedCornerShape(22.dp))
-            .clickable { onClick() }
-            .padding(24.dp)
+            .border(1.5.dp, AccentCyan.copy(alpha = 0.45f), RoundedCornerShape(22.dp))
+            .combinedClickable(
+                onClick = onClick,
+                onLongClick = onLongClick
+            )
+            .padding(22.dp)
     ) {
         Column(
             modifier = Modifier.fillMaxSize(),
             verticalArrangement = Arrangement.SpaceBetween
         ) {
+            // Top Bar: Camera Icon & Live DVR Status Badge
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -142,49 +156,65 @@ fun ZLinkHeroCard(
             ) {
                 Box(
                     modifier = Modifier
-                        .size(54.dp)
-                        .clip(CircleShape)
-                        .background(AccentZLink.copy(alpha = 0.2f)),
+                        .size(50.dp)
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(AccentCyan.copy(alpha = 0.15f)),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
-                        imageVector = Icons.Default.DirectionsCar,
-                        contentDescription = "Android Auto ZLink",
-                        tint = AccentZLink,
-                        modifier = Modifier.size(32.dp)
+                        imageVector = Icons.Default.Videocam,
+                        contentDescription = "Dashcam DVR",
+                        tint = AccentCyan,
+                        modifier = Modifier.size(30.dp)
                     )
                 }
 
-                // Status Badge
-                Box(
+                // REC Live Status Badge
+                Row(
                     modifier = Modifier
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(AccentZLink.copy(alpha = 0.15f))
-                        .padding(horizontal = 12.dp, vertical = 6.dp)
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(Color(0xFF1E293B))
+                        .border(1.dp, Color(0xFFEF4444).copy(alpha = 0.6f), RoundedCornerShape(10.dp))
+                        .padding(horizontal = 10.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
+                    Box(
+                        modifier = Modifier
+                            .size(8.dp)
+                            .clip(CircleShape)
+                            .background(Color(0xFFEF4444))
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
                     Text(
-                        text = "ZLINK READY",
-                        fontSize = 12.sp,
+                        text = "LIVE DVR",
+                        fontSize = 11.sp,
                         fontWeight = FontWeight.Bold,
-                        color = AccentZLink,
+                        color = Color(0xFFEF4444),
                         letterSpacing = 0.8.sp
                     )
                 }
             }
 
+            // Bottom Labels & Placement Guide
             Column {
                 Text(
-                    text = "Android Auto",
-                    fontSize = 32.sp,
+                    text = "Dashcam",
+                    fontSize = 28.sp,
                     fontWeight = FontWeight.Bold,
                     color = TextPrimary
                 )
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    text = dvrApp?.label ?: "Tap to launch DVR • Long-press to choose app",
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = AccentCyan
+                )
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
-                    text = "Tap to connect via $label",
-                    fontSize = 15.sp,
-                    fontWeight = FontWeight.Normal,
-                    color = TextSecondary
+                    text = "Dock your DVR floating window inside this card",
+                    fontSize = 11.sp,
+                    color = TextMuted
                 )
             }
         }

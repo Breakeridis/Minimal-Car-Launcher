@@ -9,5 +9,6 @@ data class AppInfo(
     val icon: Drawable? = null,
     val isZLink: Boolean = false,
     val isNavigation: Boolean = false,
-    val isMusic: Boolean = false
+    val isMusic: Boolean = false,
+    val isDvr: Boolean = false
 )

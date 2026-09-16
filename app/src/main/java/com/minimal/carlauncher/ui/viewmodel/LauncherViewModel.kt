@@ -55,6 +55,11 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
     private val _musicApp = MutableStateFlow<AppInfo?>(null)
     val musicApp: StateFlow<AppInfo?> = _musicApp.asStateFlow()
 
+    private val _dvrApp = MutableStateFlow<AppInfo?>(null)
+    val dvrApp: StateFlow<AppInfo?> = _dvrApp.asStateFlow()
+
+    private var hasAutoStartedDvr = false
+
     private val _isAppDrawerOpen = MutableStateFlow(false)
     val isAppDrawerOpen: StateFlow<Boolean> = _isAppDrawerOpen.asStateFlow()
 
@@ -83,6 +88,9 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
 
     private val _isMusicPickerOpen = MutableStateFlow(false)
     val isMusicPickerOpen: StateFlow<Boolean> = _isMusicPickerOpen.asStateFlow()
+
+    private val _isDvrPickerOpen = MutableStateFlow(false)
+    val isDvrPickerOpen: StateFlow<Boolean> = _isDvrPickerOpen.asStateFlow()
 
     // About & In-App Updater State
     val currentVersion: String = updateManager.getCurrentVersionName()
@@ -116,6 +124,17 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
             _zlinkApp.value = apps.firstOrNull { it.isZLink }
             _navigationApp.value = repository.resolveNavApp(apps)
             _musicApp.value = repository.resolveMusicApp(apps)
+            val dvr = repository.resolveDvrApp(apps)
+            _dvrApp.value = dvr
+
+            // Auto-start DVR app on initial boot if enabled
+            if (!hasAutoStartedDvr && repository.isDvrAutoStartEnabled() && dvr != null) {
+                hasAutoStartedDvr = true
+                viewModelScope.launch {
+                    delay(1200L)
+                    repository.launchApp(dvr)
+                }
+            }
         }
     }
 
@@ -242,6 +261,21 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
         Toast.makeText(getApplication(), "Music player set to ${app.label}", Toast.LENGTH_SHORT).show()
     }
 
+    fun openDvrPicker() {
+        _isDvrPickerOpen.value = true
+    }
+
+    fun closeDvrPicker() {
+        _isDvrPickerOpen.value = false
+    }
+
+    fun selectDvrApp(app: AppInfo) {
+        repository.setCustomDvrPackage(app.packageName)
+        _dvrApp.value = app
+        _isDvrPickerOpen.value = false
+        Toast.makeText(getApplication(), "Dashcam set to ${app.label}", Toast.LENGTH_SHORT).show()
+    }
+
     // --- About & In-App GitHub Updater ---
 
     fun openAboutDialog() {
@@ -298,6 +332,25 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
     }
 
     // --- Other Shortcuts ---
+
+    fun launchDvr() {
+        val dvr = _dvrApp.value
+        if (dvr != null) {
+            repository.launchApp(dvr)
+        } else {
+            val launched = repository.launchPackage("com.car.dvr") ||
+                    repository.launchPackage("com.android.dvr") ||
+                    repository.launchPackage("com.xyauto.dvr") ||
+                    repository.launchPackage("com.syu.dvr") ||
+                    repository.launchPackage("com.teyes.dvr") ||
+                    repository.launchPackage("com.topway.dvr") ||
+                    repository.launchPackage("com.hcn.dvr") ||
+                    repository.launchPackage("com.camera.dvr")
+            if (!launched) {
+                openDvrPicker()
+            }
+        }
+    }
 
     fun launchZLink() {
         val zlink = _zlinkApp.value

@@ -478,12 +478,12 @@ fun AboutDialog(
                         FeatureChip(
                             modifier = Modifier.weight(1f),
                             title = "GPS Speedometer",
-                            desc = "KM/H & MPH with Compass"
+                            desc = "KM/H & MPH"
                         )
                         FeatureChip(
                             modifier = Modifier.weight(1f),
-                            title = "Phone Projection",
-                            desc = "ZLink CarPlay / Android Auto"
+                            title = "Live Dashcam / DVR",
+                            desc = "Floating frame & auto-start"
                         )
                     }
 
@@ -495,13 +495,13 @@ fun AboutDialog(
                     ) {
                         FeatureChip(
                             modifier = Modifier.weight(1f),
-                            title = "Customizable Dock",
-                            desc = "Long-press to pin or remove"
+                            title = "Phone Projection",
+                            desc = "ZLink CarPlay / Android Auto"
                         )
                         FeatureChip(
                             modifier = Modifier.weight(1f),
-                            title = "Direct In-App Updater",
-                            desc = "Auto-update from GitHub"
+                            title = "Customizable Dock",
+                            desc = "Long-press to pin or remove"
                         )
                     }
 
