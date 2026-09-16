@@ -142,8 +142,9 @@ class UpdateManager(private val context: Context) {
                 }
             }
 
-            val fileLength = connection?.contentLength ?: -1
-            val input = BufferedInputStream(connection?.inputStream)
+            val activeConnection = connection ?: return@withContext null
+            val fileLength = activeConnection.contentLength
+            val input = BufferedInputStream(activeConnection.inputStream)
             val output = FileOutputStream(targetFile)
 
             val data = ByteArray(8192)

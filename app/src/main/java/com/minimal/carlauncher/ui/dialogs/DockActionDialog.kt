@@ -133,9 +133,7 @@ fun DockActionDialog(
                     OutlinedButton(
                         onClick = onRemove,
                         colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFFEF4444)),
-                        border = ButtonDefaults.outlinedButtonBorder.copy(
-                            brush = androidx.compose.ui.graphics.SolidColor(Color(0xFFEF4444))
-                        ),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFEF4444)),
                         shape = RoundedCornerShape(12.dp),
                         modifier = Modifier.weight(1f).height(48.dp)
                     ) {

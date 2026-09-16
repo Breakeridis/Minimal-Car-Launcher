@@ -130,7 +130,7 @@ fun UpdateDialog(
                         )
                         Spacer(modifier = Modifier.height(8.dp))
                         LinearProgressIndicator(
-                            progress = { (downloadProgress.toFloat() / 100f).coerceIn(0f, 1f) },
+                            progress = (downloadProgress.toFloat() / 100f).coerceIn(0f, 1f),
                             modifier = Modifier.fillMaxWidth().height(8.dp).clip(RoundedCornerShape(4.dp)),
                             color = AccentCyan,
                             trackColor = CarSurfaceVariant

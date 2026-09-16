@@ -52,6 +52,7 @@ import com.minimal.carlauncher.ui.theme.TextMuted
 import com.minimal.carlauncher.ui.theme.TextPrimary
 import com.minimal.carlauncher.util.BitmapHelper
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun AppDrawerDialog(
     isOpen: Boolean,
