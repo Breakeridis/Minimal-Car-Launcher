@@ -16,7 +16,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.DeleteOutline
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -138,7 +138,7 @@ fun DockActionDialog(
                         modifier = Modifier.weight(1f).height(48.dp)
                     ) {
                         Icon(
-                            imageVector = Icons.Default.DeleteOutline,
+                            imageVector = Icons.Default.Delete,
                             contentDescription = null,
                             tint = Color(0xFFEF4444),
                             modifier = Modifier.size(20.dp)
