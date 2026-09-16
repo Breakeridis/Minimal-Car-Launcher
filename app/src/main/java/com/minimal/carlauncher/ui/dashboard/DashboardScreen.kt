@@ -15,10 +15,10 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.minimal.carlauncher.ui.dialogs.AboutDialog
 import com.minimal.carlauncher.ui.dialogs.AppPickerDialog
 import com.minimal.carlauncher.ui.dialogs.DockActionDialog
 import com.minimal.carlauncher.ui.dialogs.DrawerActionDialog
-import com.minimal.carlauncher.ui.dialogs.UpdateDialog
 import com.minimal.carlauncher.ui.drawer.AppDrawerDialog
 import com.minimal.carlauncher.ui.theme.CarBg
 import com.minimal.carlauncher.ui.viewmodel.LauncherViewModel
@@ -52,10 +52,11 @@ fun DashboardScreen(
     val isNavPickerOpen by viewModel.isNavPickerOpen.collectAsState()
     val isMusicPickerOpen by viewModel.isMusicPickerOpen.collectAsState()
 
+    val currentVersion = viewModel.currentVersion
+    val isAboutDialogOpen by viewModel.isAboutDialogOpen.collectAsState()
     val isCheckingUpdate by viewModel.isCheckingUpdate.collectAsState()
     val updateInfo by viewModel.updateInfo.collectAsState()
     val updateProgress by viewModel.updateDownloadProgress.collectAsState()
-    val isUpdateDialogOpen by viewModel.isUpdateDialogOpen.collectAsState()
 
     Box(
         modifier = modifier
@@ -117,11 +118,10 @@ fun DashboardScreen(
             // Bottom Persistent Dock
             BottomDock(
                 pinnedApps = pinnedApps,
-                isCheckingUpdate = isCheckingUpdate,
                 onOpenAppDrawer = { viewModel.openAppDrawer() },
                 onLaunchApp = { app -> viewModel.launchApp(app) },
                 onLongClickApp = { app -> viewModel.onDockAppLongClick(app) },
-                onCheckUpdate = { viewModel.checkForUpdates(isManualCheck = true) },
+                onOpenAbout = { viewModel.openAboutDialog() },
                 onOpenSettings = { viewModel.launchSettings() }
             )
         }
@@ -179,13 +179,16 @@ fun DashboardScreen(
             onDismiss = { viewModel.dismissDrawerActionDialog() }
         )
 
-        // In-App GitHub Update Dialog
-        UpdateDialog(
-            isOpen = isUpdateDialogOpen,
+        // About App & Software Update Dialog
+        AboutDialog(
+            isOpen = isAboutDialogOpen,
+            currentVersion = currentVersion,
             updateInfo = updateInfo,
+            isCheckingUpdate = isCheckingUpdate,
             downloadProgress = updateProgress,
+            onCheckUpdate = { viewModel.checkForUpdates(isManualCheck = true) },
             onInstall = { viewModel.startDownloadAndInstall() },
-            onDismiss = { viewModel.dismissUpdateDialog() }
+            onDismiss = { viewModel.dismissAboutDialog() }
         )
     }
 }

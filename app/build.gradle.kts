@@ -3,6 +3,13 @@ plugins {
     id("org.jetbrains.kotlin.android")
 }
 
+val buildNum = providers.gradleProperty("buildNumber")
+    .orElse(providers.environmentVariable("GITHUB_RUN_NUMBER"))
+    .getOrElse("8")
+
+val appVersionCode = buildNum.toIntOrNull()?.takeIf { it > 0 } ?: 1
+val appVersionName = "1.0.$buildNum"
+
 android {
     namespace = "com.minimal.carlauncher"
     compileSdk = 34
@@ -11,8 +18,8 @@ android {
         applicationId = "com.minimal.carlauncher"
         minSdk = 26
         targetSdk = 34
-        versionCode = 1
-        versionName = "1.0.0"
+        versionCode = appVersionCode
+        versionName = appVersionName
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {

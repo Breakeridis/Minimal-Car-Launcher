@@ -19,8 +19,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Apps
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.SystemUpdate
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -44,11 +44,10 @@ import com.minimal.carlauncher.util.BitmapHelper
 @Composable
 fun BottomDock(
     pinnedApps: List<AppInfo>,
-    isCheckingUpdate: Boolean,
     onOpenAppDrawer: () -> Unit,
     onLaunchApp: (AppInfo) -> Unit,
     onLongClickApp: (AppInfo) -> Unit,
-    onCheckUpdate: () -> Unit,
+    onOpenAbout: () -> Unit,
     onOpenSettings: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -129,29 +128,21 @@ fun BottomDock(
             horizontalArrangement = Arrangement.spacedBy(10.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Check for Updates Button
+            // About & Updates Button
             Box(
                 modifier = Modifier
                     .size(44.dp)
                     .clip(CircleShape)
                     .background(CarSurfaceVariant)
-                    .clickable { onCheckUpdate() },
+                    .clickable { onOpenAbout() },
                 contentAlignment = Alignment.Center
             ) {
-                if (isCheckingUpdate) {
-                    CircularProgressIndicator(
-                        color = AccentCyan,
-                        strokeWidth = 2.dp,
-                        modifier = Modifier.size(20.dp)
-                    )
-                } else {
-                    Icon(
-                        imageVector = Icons.Default.SystemUpdate,
-                        contentDescription = "Check for Updates",
-                        tint = AccentCyan,
-                        modifier = Modifier.size(22.dp)
-                    )
-                }
+                Icon(
+                    imageVector = Icons.Default.Info,
+                    contentDescription = "About & Updates",
+                    tint = AccentCyan,
+                    modifier = Modifier.size(22.dp)
+                )
             }
 
             // System Settings Button

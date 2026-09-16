@@ -84,7 +84,12 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
     private val _isMusicPickerOpen = MutableStateFlow(false)
     val isMusicPickerOpen: StateFlow<Boolean> = _isMusicPickerOpen.asStateFlow()
 
-    // In-App Updater State
+    // About & In-App Updater State
+    val currentVersion: String = updateManager.getCurrentVersionName()
+
+    private val _isAboutDialogOpen = MutableStateFlow(false)
+    val isAboutDialogOpen: StateFlow<Boolean> = _isAboutDialogOpen.asStateFlow()
+
     private val _isCheckingUpdate = MutableStateFlow(false)
     val isCheckingUpdate: StateFlow<Boolean> = _isCheckingUpdate.asStateFlow()
 
@@ -93,9 +98,6 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
 
     private val _updateDownloadProgress = MutableStateFlow<Int?>(null)
     val updateDownloadProgress: StateFlow<Int?> = _updateDownloadProgress.asStateFlow()
-
-    private val _isUpdateDialogOpen = MutableStateFlow(false)
-    val isUpdateDialogOpen: StateFlow<Boolean> = _isUpdateDialogOpen.asStateFlow()
 
     init {
         loadApps()
@@ -240,7 +242,20 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
         Toast.makeText(getApplication(), "Music player set to ${app.label}", Toast.LENGTH_SHORT).show()
     }
 
-    // --- In-App GitHub Updater ---
+    // --- About & In-App GitHub Updater ---
+
+    fun openAboutDialog() {
+        _isAboutDialogOpen.value = true
+        if (_updateInfo.value == null && !_isCheckingUpdate.value) {
+            checkForUpdates(isManualCheck = false)
+        }
+    }
+
+    fun dismissAboutDialog() {
+        if (_updateDownloadProgress.value == null) {
+            _isAboutDialogOpen.value = false
+        }
+    }
 
     fun checkForUpdates(isManualCheck: Boolean = true) {
         viewModelScope.launch {
@@ -250,7 +265,13 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
 
             if (release != null) {
                 _updateInfo.value = release
-                _isUpdateDialogOpen.value = true
+                if (isManualCheck) {
+                    if (release.isUpdateAvailable) {
+                        Toast.makeText(getApplication(), "Update available: ${release.tagName}", Toast.LENGTH_SHORT).show()
+                    } else {
+                        Toast.makeText(getApplication(), "You're running the latest version", Toast.LENGTH_SHORT).show()
+                    }
+                }
             } else if (isManualCheck) {
                 Toast.makeText(getApplication(), "No updates found on GitHub", Toast.LENGTH_SHORT).show()
             }
@@ -267,18 +288,12 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
 
             if (downloadedFile != null && downloadedFile.exists()) {
                 _updateDownloadProgress.value = null
-                _isUpdateDialogOpen.value = false
+                _isAboutDialogOpen.value = false
                 updateManager.promptInstall(downloadedFile)
             } else {
                 _updateDownloadProgress.value = null
                 Toast.makeText(getApplication(), "Download failed. Please check internet connection.", Toast.LENGTH_LONG).show()
             }
-        }
-    }
-
-    fun dismissUpdateDialog() {
-        if (_updateDownloadProgress.value == null) {
-            _isUpdateDialogOpen.value = false
         }
     }
 

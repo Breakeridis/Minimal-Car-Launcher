@@ -21,12 +21,47 @@ data class UpdateInfo(
     val title: String,
     val changelog: String,
     val apkDownloadUrl: String,
-    val apkSize: Long
+    val apkSize: Long,
+    val isUpdateAvailable: Boolean
 )
 
 class UpdateManager(private val context: Context) {
 
     private val releasesUrl = "https://api.github.com/repos/Breakeridis/Minimal-Car-Launcher/releases/latest"
+
+    fun getCurrentVersionName(): String {
+        return try {
+            val pInfo = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                context.packageManager.getPackageInfo(
+                    context.packageName,
+                    android.content.pm.PackageManager.PackageInfoFlags.of(0L)
+                )
+            } else {
+                @Suppress("DEPRECATION")
+                context.packageManager.getPackageInfo(context.packageName, 0)
+            }
+            pInfo.versionName ?: "1.0.0"
+        } catch (e: Exception) {
+            "1.0.0"
+        }
+    }
+
+    fun isNewerVersion(remoteTag: String, currentVersion: String = getCurrentVersionName()): Boolean {
+        val cleanRemote = remoteTag.trim().removePrefix("v").removePrefix("V")
+        val cleanCurrent = currentVersion.trim().removePrefix("v").removePrefix("V")
+
+        val remoteParts = cleanRemote.split(".").map { it.toIntOrNull() ?: 0 }
+        val currentParts = cleanCurrent.split(".").map { it.toIntOrNull() ?: 0 }
+
+        val maxLen = maxOf(remoteParts.size, currentParts.size)
+        for (i in 0 until maxLen) {
+            val r = remoteParts.getOrElse(i) { 0 }
+            val c = currentParts.getOrElse(i) { 0 }
+            if (r > c) return true
+            if (r < c) return false
+        }
+        return false
+    }
 
     suspend fun checkLatestRelease(): UpdateInfo? = withContext(Dispatchers.IO) {
         var connection: HttpURLConnection? = null
@@ -95,12 +130,14 @@ class UpdateManager(private val context: Context) {
             val downloadUrl = asset.optString("browser_download_url", "")
             val size = asset.optLong("size", 0L)
             if (name.endsWith(".apk", ignoreCase = true) && downloadUrl.isNotBlank()) {
+                val isUpdateAvailable = isNewerVersion(tagName)
                 return UpdateInfo(
                     tagName = tagName,
                     title = title,
                     changelog = changelog,
                     apkDownloadUrl = downloadUrl,
-                    apkSize = size
+                    apkSize = size,
+                    isUpdateAvailable = isUpdateAvailable
                 )
             }
         }
