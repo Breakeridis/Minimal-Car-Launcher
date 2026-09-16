@@ -121,16 +121,17 @@ fun UpdateDialog(
                 Spacer(modifier = Modifier.height(18.dp))
 
                 if (isDownloading) {
+                    val progressValue = downloadProgress ?: 0
                     Column(modifier = Modifier.fillMaxWidth()) {
                         Text(
-                            text = "Downloading APK: $downloadProgress%",
+                            text = "Downloading APK: $progressValue%",
                             fontSize = 14.sp,
                             fontWeight = FontWeight.Medium,
                             color = AccentCyan
                         )
                         Spacer(modifier = Modifier.height(8.dp))
                         LinearProgressIndicator(
-                            progress = (downloadProgress.toFloat() / 100f).coerceIn(0f, 1f),
+                            progress = (progressValue.toFloat() / 100f).coerceIn(0f, 1f),
                             modifier = Modifier.fillMaxWidth().height(8.dp).clip(RoundedCornerShape(4.dp)),
                             color = AccentCyan,
                             trackColor = CarSurfaceVariant
