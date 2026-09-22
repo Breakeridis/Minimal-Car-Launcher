@@ -30,6 +30,12 @@ class SpeedometerManager(private val context: Context) : LocationListener {
     private val _unit = MutableStateFlow(SpeedUnit.KMH)
     val unit: StateFlow<SpeedUnit> = _unit.asStateFlow()
 
+    private val _bearing = MutableStateFlow(0f)
+    val bearing: StateFlow<Float> = _bearing.asStateFlow()
+
+    private val _cardinalDirection = MutableStateFlow("N")
+    val cardinalDirection: StateFlow<String> = _cardinalDirection.asStateFlow()
+
     private var isListening = false
 
     fun toggleUnit() {
@@ -95,6 +101,10 @@ class SpeedometerManager(private val context: Context) : LocationListener {
         } else {
             _currentSpeed.value = 0
         }
+        if (location.hasBearing()) {
+            _bearing.value = location.bearing
+            _cardinalDirection.value = getCardinalDirection(location.bearing)
+        }
         _isGpsActive.value = true
     }
 
@@ -111,6 +121,22 @@ class SpeedometerManager(private val context: Context) : LocationListener {
         if (provider == LocationManager.GPS_PROVIDER) {
             _isGpsActive.value = false
             _currentSpeed.value = 0
+        }
+    }
+
+    companion object {
+        fun getCardinalDirection(bearingDegrees: Float): String {
+            val normalized = ((bearingDegrees % 360f) + 360f) % 360f
+            return when {
+                normalized >= 337.5f || normalized < 22.5f -> "N"
+                normalized < 67.5f -> "NE"
+                normalized < 112.5f -> "E"
+                normalized < 157.5f -> "SE"
+                normalized < 202.5f -> "S"
+                normalized < 247.5f -> "SW"
+                normalized < 292.5f -> "W"
+                else -> "NW"
+            }
         }
     }
 }

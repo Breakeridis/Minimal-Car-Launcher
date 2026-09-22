@@ -34,6 +34,8 @@ fun DashboardScreen(
 
     val currentSpeed by viewModel.speedometer.currentSpeed.collectAsState()
     val speedUnit by viewModel.speedometer.unit.collectAsState()
+    val bearing by viewModel.speedometer.bearing.collectAsState()
+    val cardinalDirection by viewModel.speedometer.cardinalDirection.collectAsState()
     val isGpsActive by viewModel.speedometer.isGpsActive.collectAsState()
 
     val allApps by viewModel.allApps.collectAsState()
@@ -92,6 +94,8 @@ fun DashboardScreen(
                     SpeedometerWidget(
                         speed = currentSpeed,
                         unit = speedUnit,
+                        bearing = bearing,
+                        cardinalDirection = cardinalDirection,
                         isGpsActive = isGpsActive,
                         onToggleUnit = { viewModel.toggleSpeedUnit() },
                         modifier = Modifier
