@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -91,17 +92,31 @@ fun DashboardScreen(
                         modifier = Modifier.fillMaxWidth()
                     )
 
-                    SpeedometerWidget(
-                        speed = currentSpeed,
-                        unit = speedUnit,
-                        bearing = bearing,
-                        cardinalDirection = cardinalDirection,
-                        isGpsActive = isGpsActive,
-                        onToggleUnit = { viewModel.toggleSpeedUnit() },
+                    Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .weight(1f)
-                    )
+                            .weight(1f),
+                        horizontalArrangement = Arrangement.spacedBy(14.dp)
+                    ) {
+                        SpeedometerWidget(
+                            speed = currentSpeed,
+                            unit = speedUnit,
+                            isGpsActive = isGpsActive,
+                            onToggleUnit = { viewModel.toggleSpeedUnit() },
+                            modifier = Modifier
+                                .weight(1f)
+                                .fillMaxHeight()
+                        )
+
+                        CompassWidget(
+                            bearing = bearing,
+                            cardinalDirection = cardinalDirection,
+                            isGpsActive = isGpsActive,
+                            modifier = Modifier
+                                .weight(1f)
+                                .fillMaxHeight()
+                        )
+                    }
                 }
 
                 // Right Column: Hero Quick-Launch Cards (DVR, ZLink, Nav, Music)
