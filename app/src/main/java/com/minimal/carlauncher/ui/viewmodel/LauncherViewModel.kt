@@ -6,6 +6,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.minimal.carlauncher.data.AppInfo
 import com.minimal.carlauncher.data.AppRepository
+import com.minimal.carlauncher.service.RadioManager
 import com.minimal.carlauncher.service.SpeedometerManager
 import com.minimal.carlauncher.service.UpdateInfo
 import com.minimal.carlauncher.service.UpdateManager
@@ -26,7 +27,10 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
 
     private val repository = AppRepository(application)
     val speedometer = SpeedometerManager(application)
+    val radioManager = RadioManager(application)
     private val updateManager = UpdateManager(application)
+
+    val radioStation: StateFlow<String?> = radioManager.radioStation
 
     // Applications State
     private val _allApps = MutableStateFlow<List<AppInfo>>(emptyList())
@@ -110,6 +114,7 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
     init {
         loadApps()
         startClockTicker()
+        radioManager.startMonitoring()
     }
 
     fun loadApps() {
@@ -398,8 +403,13 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
         speedometer.toggleUnit()
     }
 
+    fun refreshRadio() {
+        radioManager.readCurrentSettingsFrequency()
+    }
+
     override fun onCleared() {
         super.onCleared()
         speedometer.stopTracking()
+        radioManager.stopMonitoring()
     }
 }

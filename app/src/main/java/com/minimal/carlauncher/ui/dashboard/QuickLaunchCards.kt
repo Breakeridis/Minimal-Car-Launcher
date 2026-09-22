@@ -24,6 +24,7 @@ import androidx.compose.material.icons.filled.DirectionsCar
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Navigation
 import androidx.compose.material.icons.filled.PhoneAndroid
+import androidx.compose.material.icons.filled.Radio
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material3.Icon
@@ -39,6 +40,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.minimal.carlauncher.data.AppInfo
+import com.minimal.carlauncher.ui.theme.AccentAmber
 import com.minimal.carlauncher.ui.theme.AccentBlue
 import com.minimal.carlauncher.ui.theme.AccentCyan
 import com.minimal.carlauncher.ui.theme.AccentGreen
@@ -56,6 +58,7 @@ fun QuickLaunchCards(
     zlinkLabel: String,
     navApp: AppInfo?,
     musicApp: AppInfo?,
+    radioStation: String? = null,
     onLaunchDvr: () -> Unit,
     onLongClickDvr: () -> Unit,
     onLaunchZLink: () -> Unit,
@@ -79,7 +82,7 @@ fun QuickLaunchCards(
                 .fillMaxHeight()
         )
 
-        // Right Column: Phone Projection (ZLink), Navigation, Music
+        // Right Column: Phone Projection (ZLink), Navigation, Music / Radio
         Column(
             modifier = Modifier
                 .weight(1f)
@@ -105,11 +108,18 @@ fun QuickLaunchCards(
                 modifier = Modifier.weight(1f)
             )
 
+            val hasRadioStation = !radioStation.isNullOrBlank()
+            val isRadio = hasRadioStation || (musicApp?.label?.contains("radio", ignoreCase = true) == true)
+            val tileTitle = if (hasRadioStation) "Radio" else (musicApp?.label ?: "Music")
+            val tileSubtitle = if (hasRadioStation) radioStation!! else (musicApp?.label ?: "Audio & Streaming")
+            val tileIcon = if (isRadio) Icons.Default.Radio else Icons.Default.MusicNote
+            val tileColor = if (hasRadioStation) AccentAmber else AccentCyan
+
             ActionTile(
-                title = "Music",
-                subtitle = musicApp?.label ?: "Audio & Streaming",
-                icon = Icons.Default.MusicNote,
-                accentColor = AccentCyan,
+                title = tileTitle,
+                subtitle = tileSubtitle,
+                icon = tileIcon,
+                accentColor = tileColor,
                 onClick = onLaunchMusic,
                 onLongClick = onLongClickMusic,
                 modifier = Modifier.weight(1f)

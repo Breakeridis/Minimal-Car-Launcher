@@ -48,6 +48,7 @@ fun DashboardScreen(
     val navigationApp by viewModel.navigationApp.collectAsState()
     val musicApp by viewModel.musicApp.collectAsState()
     val dvrApp by viewModel.dvrApp.collectAsState()
+    val radioStation by viewModel.radioStation.collectAsState()
 
     // Dialog States
     val selectedDockApp by viewModel.selectedDockAppForAction.collectAsState()
@@ -125,6 +126,7 @@ fun DashboardScreen(
                     zlinkLabel = zlinkApp?.label ?: "ZLink",
                     navApp = navigationApp,
                     musicApp = musicApp,
+                    radioStation = radioStation,
                     onLaunchDvr = { viewModel.launchDvr() },
                     onLongClickDvr = { viewModel.openDvrPicker() },
                     onLaunchZLink = { viewModel.launchZLink() },

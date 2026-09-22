@@ -48,7 +48,7 @@ class AppRepository(private val context: Context) {
         "com.navfree.android.OSMALL"
     )
 
-    // Known music players
+    // Known music players and radio apps
     private val musicPackages = setOf(
         "com.spotify.music",
         "com.google.android.apps.youtube.music",
@@ -56,7 +56,15 @@ class AppRepository(private val context: Context) {
         "com.apple.android.music",
         "deezer.android.app",
         "com.soundcloud.android",
-        "com.pandora.android"
+        "com.pandora.android",
+        "com.nwd.radio",
+        "com.navimods.radio",
+        "com.navimods.radio_free",
+        "com.android.fmradio",
+        "com.softwinner.radio",
+        "com.allwinner.radio",
+        "com.ts.radio",
+        "com.microntek.radio"
     )
 
     // Known dashcam / DVR packages found on Android head units
@@ -307,8 +315,10 @@ class AppRepository(private val context: Context) {
                 lowerPkg.contains("spotify") ||
                 lowerPkg.contains("music") ||
                 lowerPkg.contains("audio") ||
+                lowerPkg.contains("radio") ||
                 lowerLabel.contains("music") ||
-                lowerLabel.contains("spotify")
+                lowerLabel.contains("spotify") ||
+                lowerLabel.contains("radio")
     }
 
     fun isDvrPackage(pkg: String, label: String = ""): Boolean {
