@@ -36,6 +36,9 @@ class SpeedometerManager(private val context: Context) : LocationListener {
     private val _cardinalDirection = MutableStateFlow("N")
     val cardinalDirection: StateFlow<String> = _cardinalDirection.asStateFlow()
 
+    private val _currentLocation = MutableStateFlow<Location?>(null)
+    val currentLocation: StateFlow<Location?> = _currentLocation.asStateFlow()
+
     private var isListening = false
 
     fun toggleUnit() {
@@ -67,6 +70,16 @@ class SpeedometerManager(private val context: Context) : LocationListener {
                 isListening = true
                 _isGpsActive.value = true
             }
+
+            val lastKnown = locationManager.getLastKnownLocation(LocationManager.GPS_PROVIDER)
+                ?: locationManager.getLastKnownLocation(LocationManager.NETWORK_PROVIDER)
+            if (lastKnown != null) {
+                _currentLocation.value = lastKnown
+                if (lastKnown.hasBearing()) {
+                    _bearing.value = lastKnown.bearing
+                    _cardinalDirection.value = getCardinalDirection(lastKnown.bearing)
+                }
+            }
         } catch (e: SecurityException) {
             _isGpsActive.value = false
         } catch (e: Exception) {
@@ -77,6 +90,7 @@ class SpeedometerManager(private val context: Context) : LocationListener {
 
     fun stopTracking() {
         if (!isListening || locationManager == null) return
+
         try {
             locationManager.removeUpdates(this)
         } catch (e: Exception) {
@@ -89,6 +103,7 @@ class SpeedometerManager(private val context: Context) : LocationListener {
     }
 
     override fun onLocationChanged(location: Location) {
+        _currentLocation.value = location
         if (location.hasSpeed()) {
             // Speed in meters/second
             val speedMps = location.speed

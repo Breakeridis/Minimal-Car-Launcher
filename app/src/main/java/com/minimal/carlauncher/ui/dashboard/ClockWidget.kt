@@ -34,7 +34,7 @@ fun ClockWidget(
         modifier = modifier
             .clip(RoundedCornerShape(20.dp))
             .background(CarSurface)
-            .padding(horizontal = 28.dp, vertical = 22.dp),
+            .padding(horizontal = 20.dp, vertical = 14.dp),
         verticalArrangement = Arrangement.Center
     ) {
         Row(

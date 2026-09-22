@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.minimal.carlauncher.ui.dialogs.AboutDialog
@@ -37,6 +38,7 @@ fun DashboardScreen(
     val speedUnit by viewModel.speedometer.unit.collectAsState()
     val bearing by viewModel.speedometer.bearing.collectAsState()
     val cardinalDirection by viewModel.speedometer.cardinalDirection.collectAsState()
+    val currentLocation by viewModel.speedometer.currentLocation.collectAsState()
     val isGpsActive by viewModel.speedometer.isGpsActive.collectAsState()
 
     val allApps by viewModel.allApps.collectAsState()
@@ -79,48 +81,47 @@ fun DashboardScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .weight(1f),
-                horizontalArrangement = Arrangement.spacedBy(16.dp)
+                horizontalArrangement = Arrangement.spacedBy(16.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
                 // Left Column: Clock + Speedometer
                 Column(
-                    modifier = Modifier.weight(1.1f),
-                    verticalArrangement = Arrangement.spacedBy(14.dp)
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxHeight(),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     ClockWidget(
                         time = currentTime,
                         seconds = currentSeconds,
                         date = currentDate,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-
-                    Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .weight(1f),
-                        horizontalArrangement = Arrangement.spacedBy(14.dp)
-                    ) {
-                        SpeedometerWidget(
-                            speed = currentSpeed,
-                            unit = speedUnit,
-                            isGpsActive = isGpsActive,
-                            onToggleUnit = { viewModel.toggleSpeedUnit() },
-                            modifier = Modifier
-                                .weight(1f)
-                                .fillMaxHeight()
-                        )
+                            .weight(1f)
+                    )
 
-                        CompassWidget(
-                            bearing = bearing,
-                            cardinalDirection = cardinalDirection,
-                            isGpsActive = isGpsActive,
-                            modifier = Modifier
-                                .weight(1f)
-                                .fillMaxHeight()
-                        )
-                    }
+                    SpeedometerWidget(
+                        speed = currentSpeed,
+                        unit = speedUnit,
+                        isGpsActive = isGpsActive,
+                        onToggleUnit = { viewModel.toggleSpeedUnit() },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(1.3f)
+                    )
                 }
 
-                // Right Column: Hero Quick-Launch Cards (DVR, ZLink, Nav, Music)
+                // Center Column: Master Circular Moving Map Portal
+                CircularMapPortal(
+                    location = currentLocation,
+                    bearing = bearing,
+                    cardinalDirection = cardinalDirection,
+                    isGpsActive = isGpsActive,
+                    onOpenNavigation = { viewModel.launchNavigation() },
+                    modifier = Modifier.fillMaxHeight()
+                )
+
+                // Right Column: Quick-Launch Tiles (Phone Projection, Dashcam, Music/Radio, Navigation)
                 QuickLaunchCards(
                     dvrApp = dvrApp,
                     zlinkLabel = zlinkApp?.label ?: "ZLink",
@@ -134,7 +135,9 @@ fun DashboardScreen(
                     onLaunchMusic = { viewModel.launchMusic() },
                     onLongClickNavigation = { viewModel.openNavPicker() },
                     onLongClickMusic = { viewModel.openMusicPicker() },
-                    modifier = Modifier.weight(2f)
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxHeight()
                 )
             }
 

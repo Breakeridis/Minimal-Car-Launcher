@@ -68,63 +68,59 @@ fun QuickLaunchCards(
     onLongClickMusic: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    Row(
-        modifier = modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(16.dp)
+    Column(
+        modifier = modifier.fillMaxHeight(),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
-        // Hero Dashcam / DVR Card (Takes 55% width)
-        DvrHeroCard(
-            dvrApp = dvrApp,
-            onClick = onLaunchDvr,
-            onLongClick = onLongClickDvr,
-            modifier = Modifier
-                .weight(1.3f)
-                .fillMaxHeight()
+        // 1. Phone Projection (ZLink)
+        ActionTile(
+            title = "Phone Projection",
+            subtitle = zlinkLabel,
+            icon = Icons.Default.DirectionsCar,
+            accentColor = AccentZLink,
+            onClick = onLaunchZLink,
+            modifier = Modifier.weight(1f)
         )
 
-        // Right Column: Phone Projection (ZLink), Navigation, Music / Radio
-        Column(
-            modifier = Modifier
-                .weight(1f)
-                .fillMaxHeight(),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            ActionTile(
-                title = "Phone Projection",
-                subtitle = zlinkLabel,
-                icon = Icons.Default.DirectionsCar,
-                accentColor = AccentZLink,
-                onClick = onLaunchZLink,
-                modifier = Modifier.weight(1f)
-            )
+        // 2. Dashcam / DVR
+        ActionTile(
+            title = "Dashcam",
+            subtitle = dvrApp?.label ?: "Tap to launch DVR",
+            icon = Icons.Default.Videocam,
+            accentColor = Color(0xFFEF4444),
+            onClick = onLaunchDvr,
+            onLongClick = onLongClickDvr,
+            modifier = Modifier.weight(1f)
+        )
 
-            ActionTile(
-                title = "Navigation",
-                subtitle = navApp?.label ?: "Google Maps / GPS",
-                icon = Icons.Default.Navigation,
-                accentColor = AccentBlue,
-                onClick = onLaunchNavigation,
-                onLongClick = onLongClickNavigation,
-                modifier = Modifier.weight(1f)
-            )
+        // 3. Music / Live Radio
+        val hasRadioStation = !radioStation.isNullOrBlank()
+        val isRadio = hasRadioStation || (musicApp?.label?.contains("radio", ignoreCase = true) == true)
+        val tileTitle = if (hasRadioStation) "Radio" else (musicApp?.label ?: "Music")
+        val tileSubtitle = if (hasRadioStation) radioStation!! else (musicApp?.label ?: "Audio & Streaming")
+        val tileIcon = if (isRadio) Icons.Default.Radio else Icons.Default.MusicNote
+        val tileColor = if (hasRadioStation) AccentAmber else AccentCyan
 
-            val hasRadioStation = !radioStation.isNullOrBlank()
-            val isRadio = hasRadioStation || (musicApp?.label?.contains("radio", ignoreCase = true) == true)
-            val tileTitle = if (hasRadioStation) "Radio" else (musicApp?.label ?: "Music")
-            val tileSubtitle = if (hasRadioStation) radioStation!! else (musicApp?.label ?: "Audio & Streaming")
-            val tileIcon = if (isRadio) Icons.Default.Radio else Icons.Default.MusicNote
-            val tileColor = if (hasRadioStation) AccentAmber else AccentCyan
+        ActionTile(
+            title = tileTitle,
+            subtitle = tileSubtitle,
+            icon = tileIcon,
+            accentColor = tileColor,
+            onClick = onLaunchMusic,
+            onLongClick = onLongClickMusic,
+            modifier = Modifier.weight(1f)
+        )
 
-            ActionTile(
-                title = tileTitle,
-                subtitle = tileSubtitle,
-                icon = tileIcon,
-                accentColor = tileColor,
-                onClick = onLaunchMusic,
-                onLongClick = onLongClickMusic,
-                modifier = Modifier.weight(1f)
-            )
-        }
+        // 4. Navigation (Google Maps / Waze)
+        ActionTile(
+            title = "Navigation",
+            subtitle = navApp?.label ?: "Google Maps / GPS",
+            icon = Icons.Default.Navigation,
+            accentColor = AccentBlue,
+            onClick = onLaunchNavigation,
+            onLongClick = onLongClickNavigation,
+            modifier = Modifier.weight(1f)
+        )
     }
 }
 

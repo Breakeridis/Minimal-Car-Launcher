@@ -86,6 +86,9 @@ dependencies {
     // Coroutines
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.0")
 
+    // OpenStreetMap for Live Automotive Moving Road Map
+    implementation("org.osmdroid:osmdroid-android:6.1.18")
+
     debugImplementation("androidx.compose.ui:ui-tooling")
     debugImplementation("androidx.compose.ui:ui-test-manifest")
 }
