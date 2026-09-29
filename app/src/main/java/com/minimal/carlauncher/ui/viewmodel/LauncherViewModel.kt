@@ -87,6 +87,9 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
     private val _isReplacePickerOpen = MutableStateFlow(false)
     val isReplacePickerOpen: StateFlow<Boolean> = _isReplacePickerOpen.asStateFlow()
 
+    private val _isAddDockPickerOpen = MutableStateFlow(false)
+    val isAddDockPickerOpen: StateFlow<Boolean> = _isAddDockPickerOpen.asStateFlow()
+
     private val _selectedDrawerAppForAction = MutableStateFlow<AppInfo?>(null)
     val selectedDrawerAppForAction: StateFlow<AppInfo?> = _selectedDrawerAppForAction.asStateFlow()
 
@@ -233,6 +236,25 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
         _isReplacePickerOpen.value = false
         _selectedDockAppForAction.value = null
         Toast.makeText(getApplication(), "Replaced with ${newApp.label}", Toast.LENGTH_SHORT).show()
+    }
+
+    fun openAddDockPicker() {
+        _isAddDockPickerOpen.value = true
+    }
+
+    fun closeAddDockPicker() {
+        _isAddDockPickerOpen.value = false
+    }
+
+    fun addDockApp(newApp: AppInfo) {
+        val added = repository.addPinnedApp(_allApps.value, newApp)
+        _pinnedApps.value = repository.getPinnedApps(_allApps.value)
+        _isAddDockPickerOpen.value = false
+        if (added) {
+            Toast.makeText(getApplication(), "Added ${newApp.label} to bottom bar", Toast.LENGTH_SHORT).show()
+        } else {
+            Toast.makeText(getApplication(), "${newApp.label} is already in the bottom bar", Toast.LENGTH_SHORT).show()
+        }
     }
 
     // --- Drawer Long Press to Pin ---

@@ -138,13 +138,25 @@ fun AppPickerDialog(
 
                 Spacer(modifier = Modifier.height(16.dp))
 
-                LazyVerticalGrid(
-                    columns = GridCells.Fixed(6),
-                    contentPadding = PaddingValues(8.dp),
-                    horizontalArrangement = Arrangement.spacedBy(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(16.dp),
-                    modifier = Modifier.fillMaxSize()
-                ) {
+                if (filtered.isEmpty()) {
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = if (search.isBlank()) "No apps available to add" else "No matching apps found",
+                            fontSize = 16.sp,
+                            color = TextMuted
+                        )
+                    }
+                } else {
+                    LazyVerticalGrid(
+                        columns = GridCells.Fixed(6),
+                        contentPadding = PaddingValues(8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(16.dp),
+                        modifier = Modifier.fillMaxSize()
+                    ) {
                     items(filtered, key = { it.packageName + it.activityName }) { app ->
                         val imageBitmap = BitmapHelper.safeDrawableToImageBitmap(app.icon, 80, 80)
                         Column(
@@ -194,4 +206,5 @@ fun AppPickerDialog(
             }
         }
     }
+}
 }

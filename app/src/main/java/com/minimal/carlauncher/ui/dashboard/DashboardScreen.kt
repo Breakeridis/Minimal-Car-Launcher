@@ -61,6 +61,7 @@ fun DashboardScreen(
     // Dialog States
     val selectedDockApp by viewModel.selectedDockAppForAction.collectAsState()
     val isReplacePickerOpen by viewModel.isReplacePickerOpen.collectAsState()
+    val isAddDockPickerOpen by viewModel.isAddDockPickerOpen.collectAsState()
     val selectedDrawerApp by viewModel.selectedDrawerAppForAction.collectAsState()
     val isNavPickerOpen by viewModel.isNavPickerOpen.collectAsState()
     val isMusicPickerOpen by viewModel.isMusicPickerOpen.collectAsState()
@@ -170,6 +171,7 @@ fun DashboardScreen(
                 onOpenAppDrawer = { viewModel.openAppDrawer() },
                 onLaunchApp = { app -> viewModel.launchApp(app) },
                 onLongClickApp = { app -> viewModel.onDockAppLongClick(app) },
+                onAddApp = { viewModel.openAddDockPicker() },
                 onOpenAbout = { viewModel.openAboutDialog() },
                 onOpenSettings = { viewModel.launchSettings() },
                 isUpdateAvailable = updateInfo?.isUpdateAvailable == true
@@ -202,6 +204,15 @@ fun DashboardScreen(
             title = "Choose App to Place in Bottom Bar",
             onAppSelected = { newApp -> viewModel.replaceDockAppWith(newApp) },
             onDismiss = { viewModel.closeReplacePicker() }
+        )
+
+        // App Picker Dialog (when + is clicked to add to bottom bar)
+        AppPickerDialog(
+            isOpen = isAddDockPickerOpen,
+            apps = allApps.filter { app -> pinnedApps.none { it.packageName == app.packageName } },
+            title = "Add App to Bottom Bar",
+            onAppSelected = { newApp -> viewModel.addDockApp(newApp) },
+            onDismiss = { viewModel.closeAddDockPicker() }
         )
 
         // Navigation App Picker Dialog (when Navigation tile is long-pressed)

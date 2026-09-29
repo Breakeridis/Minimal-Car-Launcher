@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Apps
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Settings
@@ -47,6 +48,7 @@ fun BottomDock(
     onOpenAppDrawer: () -> Unit,
     onLaunchApp: (AppInfo) -> Unit,
     onLongClickApp: (AppInfo) -> Unit,
+    onAddApp: () -> Unit,
     onOpenAbout: () -> Unit,
     onOpenSettings: () -> Unit,
     isUpdateAvailable: Boolean = false,
@@ -87,7 +89,7 @@ fun BottomDock(
             )
         }
 
-        // Pinned Custom Apps in Center (with Long-Press to Replace / Remove)
+        // Pinned Custom Apps in Center (with Long-Press to Replace / Remove) & Add (+) Button
         Row(
             horizontalArrangement = Arrangement.spacedBy(14.dp),
             verticalAlignment = Alignment.CenterVertically
@@ -120,6 +122,26 @@ fun BottomDock(
                             color = AccentCyan
                         )
                     }
+                }
+            }
+
+            // Add (+) Button to open app list and pin apps to bar
+            if (pinnedApps.size < com.minimal.carlauncher.data.AppRepository.MAX_DOCK_APPS) {
+                Box(
+                    modifier = Modifier
+                        .size(48.dp)
+                        .clip(CircleShape)
+                        .background(CarSurfaceVariant)
+                        .border(1.dp, AccentCyan.copy(alpha = 0.5f), CircleShape)
+                        .clickable { onAddApp() },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Add,
+                        contentDescription = "Add App to Bar",
+                        tint = AccentCyan,
+                        modifier = Modifier.size(24.dp)
+                    )
                 }
             }
         }

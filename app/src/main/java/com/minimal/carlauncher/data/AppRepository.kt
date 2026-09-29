@@ -21,6 +21,7 @@ class AppRepository(private val context: Context) {
 
     companion object {
         private const val KEY_PINNED_PACKAGES = "key_pinned_dock_packages"
+        private const val KEY_DOCK_INITIALIZED_EMPTY = "key_dock_initialized_empty_v2"
         private const val KEY_CUSTOM_NAV_PACKAGE = "key_custom_nav_package"
         private const val KEY_CUSTOM_MUSIC_PACKAGE = "key_custom_music_package"
         private const val KEY_CUSTOM_DVR_PACKAGE = "key_custom_dvr_package"
@@ -173,41 +174,33 @@ class AppRepository(private val context: Context) {
     }
 
     fun getPinnedApps(allApps: List<AppInfo>): List<AppInfo> {
+        // By default, the bottom app bar starts empty.
+        // If not initialized yet in this empty-by-default version, initialize to empty list.
+        if (!prefs.getBoolean(KEY_DOCK_INITIALIZED_EMPTY, false)) {
+            savePinnedPackageNames(emptyList())
+            prefs.edit().putBoolean(KEY_DOCK_INITIALIZED_EMPTY, true).apply()
+            return emptyList()
+        }
+
         val saved = getPinnedPackageNames()
-        if (saved.isNotEmpty()) {
-            val appMap = allApps.associateBy { it.packageName }
-            return saved.mapNotNull { appMap[it] }
+        if (saved.isEmpty()) {
+            return emptyList()
         }
 
-        // First launch default: pick up to MAX_DOCK_APPS
-        val defaults = mutableListOf<AppInfo>()
-        val nav = allApps.firstOrNull { it.isNavigation }
-        val music = allApps.firstOrNull { it.isMusic }
-        val zlink = allApps.firstOrNull { it.isZLink }
-
-        if (nav != null) defaults.add(nav)
-        if (music != null && !defaults.contains(music)) defaults.add(music)
-        if (zlink != null && !defaults.contains(zlink)) defaults.add(zlink)
-
-        for (app in allApps) {
-            if (defaults.size >= MAX_DOCK_APPS) break
-            if (!defaults.contains(app)) {
-                defaults.add(app)
-            }
-        }
-
-        savePinnedPackageNames(defaults.map { it.packageName })
-        return defaults
+        val appMap = allApps.associateBy { it.packageName }
+        return saved.mapNotNull { appMap[it] }
     }
 
     fun addPinnedApp(allApps: List<AppInfo>, newApp: AppInfo): Boolean {
+        if (!prefs.getBoolean(KEY_DOCK_INITIALIZED_EMPTY, false)) {
+            prefs.edit().putBoolean(KEY_DOCK_INITIALIZED_EMPTY, true).apply()
+        }
         val current = getPinnedApps(allApps).toMutableList()
         if (current.any { it.packageName == newApp.packageName }) {
             return false // Already pinned
         }
         if (current.size >= MAX_DOCK_APPS) {
-            // Drop last or refuse if full
-            current.removeAt(current.size - 1)
+            return false // Full dock
         }
         current.add(newApp)
         savePinnedPackageNames(current.map { it.packageName })
@@ -225,7 +218,7 @@ class AppRepository(private val context: Context) {
         val index = current.indexOfFirst { it.packageName == oldApp.packageName }
         if (index != -1) {
             current[index] = newApp
-        } else {
+        } else if (current.size < MAX_DOCK_APPS) {
             current.add(newApp)
         }
         savePinnedPackageNames(current.map { it.packageName })
