@@ -29,6 +29,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -54,13 +56,21 @@ fun BottomDock(
     isUpdateAvailable: Boolean = false,
     modifier: Modifier = Modifier
 ) {
+    val dockGradient = Brush.horizontalGradient(
+        colors = listOf(
+            Color(0xFF131927),
+            Color(0xFF172033),
+            Color(0xFF131927)
+        )
+    )
+
     Row(
         modifier = modifier
             .fillMaxWidth()
             .height(72.dp)
             .clip(RoundedCornerShape(20.dp))
-            .background(CarSurface)
-            .border(1.dp, CarBorder, RoundedCornerShape(20.dp))
+            .background(dockGradient)
+            .border(1.dp, CarBorder.copy(alpha = 0.55f), RoundedCornerShape(20.dp))
             .padding(horizontal = 20.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
@@ -69,7 +79,8 @@ fun BottomDock(
         Row(
             modifier = Modifier
                 .clip(RoundedCornerShape(14.dp))
-                .background(CarSurfaceVariant)
+                .background(CarSurfaceVariant.copy(alpha = 0.85f))
+                .border(1.dp, CarBorder.copy(alpha = 0.45f), RoundedCornerShape(14.dp))
                 .clickable { onOpenAppDrawer() }
                 .padding(horizontal = 18.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically
@@ -100,7 +111,8 @@ fun BottomDock(
                     modifier = Modifier
                         .size(48.dp)
                         .clip(CircleShape)
-                        .background(CarSurfaceVariant)
+                        .background(CarSurfaceVariant.copy(alpha = 0.8f))
+                        .border(1.dp, CarBorder.copy(alpha = 0.45f), CircleShape)
                         .combinedClickable(
                             onClick = { onLaunchApp(app) },
                             onLongClick = { onLongClickApp(app) }
@@ -131,8 +143,8 @@ fun BottomDock(
                     modifier = Modifier
                         .size(48.dp)
                         .clip(CircleShape)
-                        .background(CarSurfaceVariant)
-                        .border(1.dp, AccentCyan.copy(alpha = 0.5f), CircleShape)
+                        .background(CarSurfaceVariant.copy(alpha = 0.8f))
+                        .border(1.dp, AccentCyan.copy(alpha = 0.4f), CircleShape)
                         .clickable { onAddApp() },
                     contentAlignment = Alignment.Center
                 ) {
@@ -156,7 +168,8 @@ fun BottomDock(
                 modifier = Modifier
                     .size(44.dp)
                     .clip(CircleShape)
-                    .background(CarSurfaceVariant)
+                    .background(CarSurfaceVariant.copy(alpha = 0.8f))
+                    .border(1.dp, CarBorder.copy(alpha = 0.45f), CircleShape)
                     .clickable { onOpenAbout() },
                 contentAlignment = Alignment.Center
             ) {
@@ -184,14 +197,15 @@ fun BottomDock(
                 modifier = Modifier
                     .size(44.dp)
                     .clip(CircleShape)
-                    .background(CarSurfaceVariant)
+                    .background(CarSurfaceVariant.copy(alpha = 0.8f))
+                    .border(1.dp, CarBorder.copy(alpha = 0.45f), CircleShape)
                     .clickable { onOpenSettings() },
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
                     imageVector = Icons.Default.Settings,
                     contentDescription = "System Settings",
-                    tint = TextMuted,
+                    tint = TextSecondary,
                     modifier = Modifier.size(22.dp)
                 )
             }

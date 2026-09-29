@@ -26,11 +26,9 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.GpsFixed
 import androidx.compose.material.icons.filled.Navigation
-import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -66,6 +64,8 @@ import com.minimal.carlauncher.service.NavigationRoute
 import com.minimal.carlauncher.ui.theme.AccentAmber
 import com.minimal.carlauncher.ui.theme.AccentCyan
 import com.minimal.carlauncher.ui.theme.AccentGreen
+import com.minimal.carlauncher.ui.theme.AccentRed
+import com.minimal.carlauncher.ui.theme.CarBg
 import com.minimal.carlauncher.ui.theme.CarBorder
 import com.minimal.carlauncher.ui.theme.CarSurface
 import com.minimal.carlauncher.ui.theme.CarSurfaceVariant
@@ -447,7 +447,7 @@ fun CircularMapPortal(
                 .fillMaxSize()
                 .padding(30.dp)
                 .clip(CircleShape)
-                .background(Color(0xFF0F172A))
+                .background(CarBg)
         ) {
             AndroidView(
                 factory = { ctx ->
@@ -462,12 +462,13 @@ fun CircularMapPortal(
                         val initialPoint = GeoPoint(initialLat, initialLon)
                         controller.setCenter(initialPoint)
 
-                        // Automotive Dark Mode Color Matrix filter
+                        // Elegant Automotive Dark Night Color Matrix filter
+                        // Inverts luminance while preserving a deep cockpit slate-navy undertone
                         val darkMatrix = ColorMatrix(
                             floatArrayOf(
-                                -0.85f, 0f, 0f, 0f, 240f,
-                                0f, -0.85f, 0f, 0f, 240f,
-                                0f, 0f, -0.85f, 0f, 240f,
+                                -0.72f, 0f, 0f, 0f, 215f,
+                                0f, -0.72f, 0f, 0f, 220f,
+                                0f, 0f, -0.66f, 0f, 232f,
                                 0f, 0f, 0f, 1f, 0f
                             )
                         )
@@ -476,7 +477,7 @@ fun CircularMapPortal(
                         // Add Route Polylines (Casing + Core)
                         val routeCasing = Polyline(this).apply {
                             outlinePaint.apply {
-                                color = android.graphics.Color.parseColor("#0F172A")
+                                color = android.graphics.Color.parseColor("#0A0E17")
                                 strokeWidth = 14f * screenDensity
                                 strokeCap = android.graphics.Paint.Cap.ROUND
                                 strokeJoin = android.graphics.Paint.Join.ROUND
@@ -489,7 +490,7 @@ fun CircularMapPortal(
 
                         val routeCore = Polyline(this).apply {
                             outlinePaint.apply {
-                                color = android.graphics.Color.parseColor("#00F0FF")
+                                color = android.graphics.Color.parseColor("#00D2EE")
                                 strokeWidth = 8f * screenDensity
                                 strokeCap = android.graphics.Paint.Cap.ROUND
                                 strokeJoin = android.graphics.Paint.Join.ROUND
@@ -549,20 +550,20 @@ fun CircularMapPortal(
                 modifier = Modifier.fillMaxSize()
             )
 
-            // Floating Map Controls (Search, Zoom In, Zoom Out, Recenter)
+            // Floating Map Controls (Search, Recenter) - Zoom in/out handled naturally via 2-finger pinch
             Column(
                 modifier = Modifier
                     .align(Alignment.CenterEnd)
                     .padding(end = 12.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+                verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 // Search Address Autocomplete
                 Box(
                     modifier = Modifier
-                        .size(36.dp)
+                        .size(38.dp)
                         .clip(CircleShape)
-                        .background(CarSurface.copy(alpha = 0.9f))
-                        .border(1.dp, CarBorder, CircleShape)
+                        .background(CarSurface.copy(alpha = 0.88f))
+                        .border(1.dp, CarBorder.copy(alpha = 0.6f), CircleShape)
                         .clickable { onOpenSearch() },
                     contentAlignment = Alignment.Center
                 ) {
@@ -570,65 +571,19 @@ fun CircularMapPortal(
                         imageVector = Icons.Default.Search,
                         contentDescription = "Search Address",
                         tint = AccentCyan,
-                        modifier = Modifier.size(18.dp)
-                    )
-                }
-
-                // Zoom In
-                Box(
-                    modifier = Modifier
-                        .size(36.dp)
-                        .clip(CircleShape)
-                        .background(CarSurface.copy(alpha = 0.9f))
-                        .border(1.dp, CarBorder, CircleShape)
-                        .clickable {
-                            isUserPanning = true
-                            lastPanTimestamp = SystemClock.elapsedRealtime()
-                            mapViewRef?.controller?.zoomIn()
-                            currentZoom = (mapViewRef?.zoomLevelDouble ?: currentZoom) + 1.0
-                        },
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Add,
-                        contentDescription = "Zoom In",
-                        tint = TextPrimary,
-                        modifier = Modifier.size(18.dp)
-                    )
-                }
-
-                // Zoom Out
-                Box(
-                    modifier = Modifier
-                        .size(36.dp)
-                        .clip(CircleShape)
-                        .background(CarSurface.copy(alpha = 0.9f))
-                        .border(1.dp, CarBorder, CircleShape)
-                        .clickable {
-                            isUserPanning = true
-                            lastPanTimestamp = SystemClock.elapsedRealtime()
-                            mapViewRef?.controller?.zoomOut()
-                            currentZoom = (mapViewRef?.zoomLevelDouble ?: currentZoom) - 1.0
-                        },
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Remove,
-                        contentDescription = "Zoom Out",
-                        tint = TextPrimary,
-                        modifier = Modifier.size(18.dp)
+                        modifier = Modifier.size(19.dp)
                     )
                 }
 
                 // Recenter GPS
                 Box(
                     modifier = Modifier
-                        .size(36.dp)
+                        .size(38.dp)
                         .clip(CircleShape)
-                        .background(CarSurface.copy(alpha = 0.9f))
+                        .background(CarSurface.copy(alpha = 0.88f))
                         .border(
                             1.dp,
-                            if (isUserPanning) AccentAmber else CarBorder,
+                            if (isUserPanning) AccentAmber.copy(alpha = 0.8f) else CarBorder.copy(alpha = 0.6f),
                             CircleShape
                         )
                         .clickable {
@@ -643,7 +598,7 @@ fun CircularMapPortal(
                         imageVector = Icons.Default.GpsFixed,
                         contentDescription = "Recenter",
                         tint = if (isUserPanning) AccentAmber else if (isGpsActive) AccentGreen else AccentAmber,
-                        modifier = Modifier.size(18.dp)
+                        modifier = Modifier.size(19.dp)
                     )
                 }
             }
@@ -702,8 +657,8 @@ fun CircularMapPortal(
                         Box(
                             modifier = Modifier
                                 .clip(RoundedCornerShape(12.dp))
-                                .background(Color(0xFF0F172A).copy(alpha = 0.96f))
-                                .border(1.dp, AccentGreen.copy(alpha = 0.8f), RoundedCornerShape(12.dp))
+                                .background(CarSurface.copy(alpha = 0.94f))
+                                .border(1.dp, AccentGreen.copy(alpha = 0.5f), RoundedCornerShape(12.dp))
                                 .padding(horizontal = 12.dp, vertical = 7.dp)
                         ) {
                             Row(
@@ -730,7 +685,7 @@ fun CircularMapPortal(
                         Box(
                             modifier = Modifier
                                 .clip(RoundedCornerShape(12.dp))
-                                .background(Color(0xFFEF4444))
+                                .background(AccentRed)
                                 .clickable { onStopNavigation() }
                                 .padding(horizontal = 12.dp, vertical = 7.dp)
                         ) {
@@ -857,15 +812,15 @@ fun CircularMapPortal(
             if (radius > 40.dp.toPx()) {
                 // Outer bezel stroke
                 drawCircle(
-                    color = CarSurfaceVariant,
+                    color = CarBorder.copy(alpha = 0.7f),
                     radius = radius,
                     center = center,
                     style = Stroke(width = 1.5.dp.toPx())
                 )
 
-                // Inner bezel stroke (bordering the map)
+                // Inner bezel stroke (subtle cyan halo bordering the circular map)
                 drawCircle(
-                    color = CarBorder,
+                    color = AccentCyan.copy(alpha = 0.35f),
                     radius = radius - 24.dp.toPx(),
                     center = center,
                     style = Stroke(width = 1.2.dp.toPx())
@@ -1007,8 +962,8 @@ fun CircularMapPortal(
                     .align(Alignment.TopCenter)
                     .padding(top = 10.dp)
                     .clip(RoundedCornerShape(8.dp))
-                    .background(Color(0xFF0F172A).copy(alpha = 0.96f))
-                    .border(1.dp, AccentCyan.copy(alpha = 0.8f), RoundedCornerShape(8.dp))
+                    .background(CarSurface.copy(alpha = 0.94f))
+                    .border(1.dp, AccentCyan.copy(alpha = 0.5f), RoundedCornerShape(8.dp))
                     .padding(horizontal = 12.dp, vertical = 4.dp)
             ) {
                 Row(

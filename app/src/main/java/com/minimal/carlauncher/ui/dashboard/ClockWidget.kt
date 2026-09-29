@@ -1,6 +1,7 @@
 package com.minimal.carlauncher.ui.dashboard
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -14,10 +15,13 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.minimal.carlauncher.ui.theme.AccentCyan
+import com.minimal.carlauncher.ui.theme.CarBorder
 import com.minimal.carlauncher.ui.theme.CarSurface
 import com.minimal.carlauncher.ui.theme.TextMuted
 import com.minimal.carlauncher.ui.theme.TextPrimary
@@ -30,10 +34,18 @@ fun ClockWidget(
     date: String,
     modifier: Modifier = Modifier
 ) {
+    val cardGradient = Brush.verticalGradient(
+        colors = listOf(
+            Color(0xFF161E2E),
+            CarSurface
+        )
+    )
+
     Column(
         modifier = modifier
             .clip(RoundedCornerShape(20.dp))
-            .background(CarSurface)
+            .background(cardGradient)
+            .border(1.dp, CarBorder.copy(alpha = 0.5f), RoundedCornerShape(20.dp))
             .padding(horizontal = 20.dp, vertical = 14.dp),
         verticalArrangement = Arrangement.Center
     ) {

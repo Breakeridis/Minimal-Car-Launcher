@@ -3,6 +3,7 @@ package com.minimal.carlauncher.ui.dashboard
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -24,6 +25,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -31,6 +33,7 @@ import com.minimal.carlauncher.service.SpeedUnit
 import com.minimal.carlauncher.ui.theme.AccentAmber
 import com.minimal.carlauncher.ui.theme.AccentCyan
 import com.minimal.carlauncher.ui.theme.AccentGreen
+import com.minimal.carlauncher.ui.theme.CarBorder
 import com.minimal.carlauncher.ui.theme.CarSurface
 import com.minimal.carlauncher.ui.theme.CarSurfaceVariant
 import com.minimal.carlauncher.ui.theme.TextPrimary
@@ -52,10 +55,18 @@ fun SpeedometerWidget(
         label = "speedFraction"
     )
 
+    val cardGradient = Brush.verticalGradient(
+        colors = listOf(
+            Color(0xFF161E2E),
+            CarSurface
+        )
+    )
+
     Box(
         modifier = modifier
             .clip(RoundedCornerShape(20.dp))
-            .background(CarSurface)
+            .background(cardGradient)
+            .border(1.dp, CarBorder.copy(alpha = 0.5f), RoundedCornerShape(20.dp))
             .clickable { onToggleUnit() }
             .padding(14.dp),
         contentAlignment = Alignment.Center

@@ -44,6 +44,7 @@ import com.minimal.carlauncher.ui.theme.AccentAmber
 import com.minimal.carlauncher.ui.theme.AccentBlue
 import com.minimal.carlauncher.ui.theme.AccentCyan
 import com.minimal.carlauncher.ui.theme.AccentGreen
+import com.minimal.carlauncher.ui.theme.AccentRed
 import com.minimal.carlauncher.ui.theme.AccentZLink
 import com.minimal.carlauncher.ui.theme.CarBorder
 import com.minimal.carlauncher.ui.theme.CarSurface
@@ -87,7 +88,7 @@ fun QuickLaunchCards(
             title = "Dashcam",
             subtitle = dvrApp?.label ?: "Tap to launch DVR",
             icon = Icons.Default.Videocam,
-            accentColor = Color(0xFFEF4444),
+            accentColor = AccentRed,
             onClick = onLaunchDvr,
             onLongClick = onLongClickDvr,
             modifier = Modifier.weight(1f)
@@ -246,15 +247,31 @@ fun ActionTile(
     isHighlighted: Boolean = false,
     modifier: Modifier = Modifier
 ) {
+    val tileBackground = if (isHighlighted) {
+        Brush.horizontalGradient(
+            colors = listOf(
+                CarSurface,
+                accentColor.copy(alpha = 0.08f)
+            )
+        )
+    } else {
+        Brush.horizontalGradient(
+            colors = listOf(
+                Color(0xFF161E2E),
+                CarSurface
+            )
+        )
+    }
+
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
-            .background(CarSurface)
+            .clip(RoundedCornerShape(18.dp))
+            .background(tileBackground)
             .border(
                 1.dp,
-                if (isHighlighted) accentColor.copy(alpha = 0.5f) else CarBorder.copy(alpha = 0.5f),
-                RoundedCornerShape(16.dp)
+                if (isHighlighted) accentColor.copy(alpha = 0.45f) else CarBorder.copy(alpha = 0.5f),
+                RoundedCornerShape(18.dp)
             )
             .combinedClickable(
                 onClick = onClick,
@@ -267,7 +284,8 @@ fun ActionTile(
             modifier = Modifier
                 .size(44.dp)
                 .clip(CircleShape)
-                .background(accentColor.copy(alpha = if (isHighlighted) 0.25f else 0.15f)),
+                .background(accentColor.copy(alpha = if (isHighlighted) 0.20f else 0.12f))
+                .border(1.dp, accentColor.copy(alpha = if (isHighlighted) 0.45f else 0.22f), CircleShape),
             contentAlignment = Alignment.Center
         ) {
             Icon(
@@ -283,7 +301,7 @@ fun ActionTile(
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = title,
-                fontSize = 18.sp,
+                fontSize = 17.sp,
                 fontWeight = FontWeight.SemiBold,
                 color = TextPrimary
             )
@@ -291,7 +309,7 @@ fun ActionTile(
                 text = subtitle,
                 fontSize = if (isHighlighted) 13.sp else 12.sp,
                 fontWeight = if (isHighlighted) FontWeight.Bold else FontWeight.Normal,
-                color = if (isHighlighted) accentColor else TextMuted
+                color = if (isHighlighted) accentColor else TextSecondary
             )
         }
     }
