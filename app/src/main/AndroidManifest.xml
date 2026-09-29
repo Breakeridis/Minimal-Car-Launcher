@@ -64,15 +64,31 @@
             <intent-filter>
                 <action android:name="com.qf.radio.update_action" />
                 <action android:name="com.qf.action.RADIO" />
+                <action android:name="com.qf.action.RADIO_INFO" />
+                <action android:name="com.qf.action.RADIO_STATE" />
                 <action android:name="com.qf.radio" />
+                <action android:name="com.qf.fmradio" />
+                <action android:name="com.qf.radio.REPORT" />
+                <action android:name="com.qf.radio.action" />
+                <action android:name="com.allwinner.radio.station_changed" />
+                <action android:name="com.allwinner.radio.REPORT" />
+                <action android:name="com.allwinner.action.RADIO_INFO" />
+                <action android:name="com.softwinner.radio.station_changed" />
+                <action android:name="com.softwinner.radio.REPORT" />
                 <action android:name="com.nwd.action.ACTION_SEND_RADIO_FREQUENCE_NEW" />
                 <action android:name="ACTION_SEND_RADIO_FREQUENCE_NEW" />
                 <action android:name="com.nwd.radio.REPORT" />
-                <action android:name="com.allwinner.radio.station_changed" />
-                <action android:name="com.allwinner.radio.REPORT" />
+                <action android:name="com.microntek.radiostate" />
+                <action android:name="com.microntek.radio.report" />
+                <action android:name="com.syu.radio" />
+                <action android:name="com.ts.radio.broadcast" />
+                <action android:name="com.navimods.radio.status" />
+                <action android:name="com.navimods.radio.station" />
                 <action android:name="com.android.music.metachanged" />
                 <action android:name="com.android.music.playstatechanged" />
                 <action android:name="android.intent.action.RADIO_STATE_CHANGED" />
+                <action android:name="android.hardware.radio.action.STATION_CHANGED" />
+                <action android:name="com.android.fmradio.FM_FREQUENCY_CHANGED" />
             </intent-filter>
         </receiver>
 
