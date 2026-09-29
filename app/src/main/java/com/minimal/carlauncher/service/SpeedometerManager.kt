@@ -102,6 +102,8 @@ class SpeedometerManager(private val context: Context) : LocationListener {
         }
     }
 
+    private var lastBearingLocation: Location? = null
+
     override fun onLocationChanged(location: Location) {
         _currentLocation.value = location
         if (location.hasSpeed()) {
@@ -116,10 +118,25 @@ class SpeedometerManager(private val context: Context) : LocationListener {
         } else {
             _currentSpeed.value = 0
         }
-        if (location.hasBearing()) {
-            _bearing.value = location.bearing
-            _cardinalDirection.value = getCardinalDirection(location.bearing)
+
+        var newBearing: Float? = null
+        if (location.hasBearing() && (location.speed > 0.5f || location.bearing != 0f)) {
+            newBearing = location.bearing
+        } else {
+            val prev = lastBearingLocation
+            if (prev != null && prev.distanceTo(location) >= 1.5f) {
+                newBearing = ((prev.bearingTo(location) % 360f) + 360f) % 360f
+            }
         }
+
+        if (newBearing != null) {
+            _bearing.value = newBearing
+            _cardinalDirection.value = getCardinalDirection(newBearing)
+            lastBearingLocation = location
+        } else if (lastBearingLocation == null) {
+            lastBearingLocation = location
+        }
+
         _isGpsActive.value = true
     }
 
