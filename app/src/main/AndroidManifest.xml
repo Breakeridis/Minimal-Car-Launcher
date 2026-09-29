@@ -56,6 +56,25 @@
             android:screenOrientation="sensorLandscape"
             android:theme="@style/Theme.CarLauncher" />
 
+        <!-- BroadcastReceiver for capturing head unit radio status events -->
+        <receiver
+            android:name=".service.RadioBroadcastReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="com.qf.radio.update_action" />
+                <action android:name="com.qf.action.RADIO" />
+                <action android:name="com.qf.radio" />
+                <action android:name="com.nwd.action.ACTION_SEND_RADIO_FREQUENCE_NEW" />
+                <action android:name="ACTION_SEND_RADIO_FREQUENCE_NEW" />
+                <action android:name="com.nwd.radio.REPORT" />
+                <action android:name="com.allwinner.radio.station_changed" />
+                <action android:name="com.allwinner.radio.REPORT" />
+                <action android:name="com.android.music.metachanged" />
+                <action android:name="com.android.music.playstatechanged" />
+                <action android:name="android.intent.action.RADIO_STATE_CHANGED" />
+            </intent-filter>
+        </receiver>
+
         <!-- FileProvider for installing downloaded APK updates -->
         <provider
             android:name="androidx.core.content.FileProvider"

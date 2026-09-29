@@ -97,7 +97,13 @@ fun QuickLaunchCards(
         val hasRadioStation = !radioStation.isNullOrBlank()
         val isRadio = hasRadioStation || (musicApp?.label?.contains("radio", ignoreCase = true) == true)
         val tileTitle = if (hasRadioStation) "Radio" else (musicApp?.label ?: "Music")
-        val tileSubtitle = if (hasRadioStation) radioStation!! else (musicApp?.label ?: "Audio & Streaming")
+        val tileSubtitle = if (hasRadioStation) {
+            radioStation!!
+        } else if (isRadio) {
+            "Tap to launch Radio"
+        } else {
+            musicApp?.label ?: "Audio & Streaming"
+        }
         val tileIcon = if (isRadio) Icons.Default.Radio else Icons.Default.MusicNote
         val tileColor = if (hasRadioStation) AccentAmber else AccentCyan
 
@@ -106,6 +112,7 @@ fun QuickLaunchCards(
             subtitle = tileSubtitle,
             icon = tileIcon,
             accentColor = tileColor,
+            isHighlighted = hasRadioStation,
             onClick = onLaunchMusic,
             onLongClick = onLongClickMusic,
             modifier = Modifier.weight(1f)
@@ -236,6 +243,7 @@ fun ActionTile(
     accentColor: Color,
     onClick: () -> Unit,
     onLongClick: (() -> Unit)? = null,
+    isHighlighted: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     Row(
@@ -243,7 +251,11 @@ fun ActionTile(
             .fillMaxWidth()
             .clip(RoundedCornerShape(16.dp))
             .background(CarSurface)
-            .border(1.dp, CarBorder.copy(alpha = 0.5f), RoundedCornerShape(16.dp))
+            .border(
+                1.dp,
+                if (isHighlighted) accentColor.copy(alpha = 0.5f) else CarBorder.copy(alpha = 0.5f),
+                RoundedCornerShape(16.dp)
+            )
             .combinedClickable(
                 onClick = onClick,
                 onLongClick = onLongClick
@@ -255,7 +267,7 @@ fun ActionTile(
             modifier = Modifier
                 .size(44.dp)
                 .clip(CircleShape)
-                .background(accentColor.copy(alpha = 0.15f)),
+                .background(accentColor.copy(alpha = if (isHighlighted) 0.25f else 0.15f)),
             contentAlignment = Alignment.Center
         ) {
             Icon(
@@ -277,8 +289,9 @@ fun ActionTile(
             )
             Text(
                 text = subtitle,
-                fontSize = 12.sp,
-                color = TextMuted
+                fontSize = if (isHighlighted) 13.sp else 12.sp,
+                fontWeight = if (isHighlighted) FontWeight.Bold else FontWeight.Normal,
+                color = if (isHighlighted) accentColor else TextMuted
             )
         }
     }
