@@ -27,8 +27,11 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.GpsFixed
+import androidx.compose.material.icons.filled.Navigation
 import androidx.compose.material.icons.filled.Remove
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -68,9 +71,11 @@ import com.minimal.carlauncher.ui.theme.TextPrimary
 import com.minimal.carlauncher.ui.theme.TextSecondary
 import kotlinx.coroutines.delay
 import org.osmdroid.config.Configuration
+import org.osmdroid.events.MapEventsReceiver
 import org.osmdroid.tileprovider.tilesource.TileSourceFactory
 import org.osmdroid.util.GeoPoint
 import org.osmdroid.views.MapView
+import org.osmdroid.views.overlay.MapEventsOverlay
 import org.osmdroid.views.overlay.Overlay
 import java.io.File
 import kotlin.math.roundToInt
@@ -151,6 +156,77 @@ private class VehicleMarkerOverlay(private val density: Float) : Overlay() {
     }
 }
 
+/**
+ * Custom osmdroid Overlay that renders a high-visibility destination pin (teardrop marker)
+ * at the selected coordinate. Counter-rotates by -mapOrientation so that the pin
+ * always stands upright on screen regardless of course-up map rotation.
+ */
+private class DestinationMarkerOverlay(private val density: Float) : Overlay() {
+    var location: GeoPoint? = null
+
+    private val shadowPaint = AndroidPaint(AndroidPaint.ANTI_ALIAS_FLAG).apply {
+        style = AndroidPaint.Style.FILL
+        color = android.graphics.Color.parseColor("#80000000")
+    }
+
+    private val pinBodyPaint = AndroidPaint(AndroidPaint.ANTI_ALIAS_FLAG).apply {
+        style = AndroidPaint.Style.FILL
+        color = android.graphics.Color.parseColor("#EF4444") // Crimson Red
+    }
+
+    private val pinBorderPaint = AndroidPaint(AndroidPaint.ANTI_ALIAS_FLAG).apply {
+        style = AndroidPaint.Style.STROKE
+        strokeWidth = 2f * density
+        color = android.graphics.Color.WHITE
+    }
+
+    private val pinCorePaint = AndroidPaint(AndroidPaint.ANTI_ALIAS_FLAG).apply {
+        style = AndroidPaint.Style.FILL
+        color = android.graphics.Color.WHITE
+    }
+
+    private val screenPoint = Point()
+    private val pinPath = android.graphics.Path()
+
+    override fun draw(canvas: android.graphics.Canvas, mapView: MapView, shadow: Boolean) {
+        if (shadow) return
+        val loc = location ?: return
+
+        mapView.projection.toPixels(loc, screenPoint)
+
+        canvas.save()
+        canvas.translate(screenPoint.x.toFloat(), screenPoint.y.toFloat())
+        canvas.rotate(-mapView.mapOrientation)
+
+        // Ground drop-shadow beneath the pin
+        canvas.drawOval(
+            -7f * density, -2.5f * density,
+            7f * density, 2.5f * density,
+            shadowPaint
+        )
+
+        val headCenterY = -24f * density
+        val headRadius = 10f * density
+
+        pinPath.reset()
+        pinPath.moveTo(0f, 0f)
+        pinPath.lineTo(-headRadius * 0.9f, headCenterY + headRadius * 0.4f)
+        pinPath.arcTo(
+            -headRadius, headCenterY - headRadius,
+            headRadius, headCenterY + headRadius,
+            155f, 230f, false
+        )
+        pinPath.lineTo(0f, 0f)
+        pinPath.close()
+
+        canvas.drawPath(pinPath, pinBodyPaint)
+        canvas.drawPath(pinPath, pinBorderPaint)
+        canvas.drawCircle(0f, headCenterY, 3.8f * density, pinCorePaint)
+
+        canvas.restore()
+    }
+}
+
 @SuppressLint("ClickableViewAccessibility")
 @Composable
 fun CircularMapPortal(
@@ -159,6 +235,8 @@ fun CircularMapPortal(
     cardinalDirection: String,
     isGpsActive: Boolean,
     onOpenNavigation: () -> Unit,
+    onSearchAddress: () -> Unit = {},
+    onNavigateToCoordinates: (Double, Double) -> Unit = { _, _ -> },
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -167,6 +245,8 @@ fun CircularMapPortal(
 
     var mapViewRef by remember { mutableStateOf<MapView?>(null) }
     var vehicleOverlayRef by remember { mutableStateOf<VehicleMarkerOverlay?>(null) }
+    var destinationOverlayRef by remember { mutableStateOf<DestinationMarkerOverlay?>(null) }
+    var selectedDestination by remember { mutableStateOf<GeoPoint?>(null) }
     var isUserPanning by remember { mutableStateOf(false) }
     var lastPanTimestamp by remember { mutableLongStateOf(0L) }
 
@@ -334,12 +414,37 @@ fun CircularMapPortal(
                         )
                         overlayManager.tilesOverlay.setColorFilter(ColorMatrixColorFilter(darkMatrix))
 
+                        // Add Destination Marker Map Overlay
+                        val destOverlay = DestinationMarkerOverlay(screenDensity).apply {
+                            this.location = selectedDestination
+                        }
+                        overlays.add(destOverlay)
+                        destinationOverlayRef = destOverlay
+
                         // Add Vehicle Marker Map Overlay
                         val overlay = VehicleMarkerOverlay(screenDensity).apply {
                             this.location = initialPoint
                         }
                         overlays.add(overlay)
                         vehicleOverlayRef = overlay
+
+                        // Add MapEventsOverlay to capture tap and long-press coordinates
+                        val mapEventsReceiver = object : MapEventsReceiver {
+                            override fun singleTapConfirmedHelper(p: GeoPoint): Boolean {
+                                selectedDestination = p
+                                destOverlay.location = p
+                                invalidate()
+                                return true
+                            }
+
+                            override fun longPressHelper(p: GeoPoint): Boolean {
+                                selectedDestination = p
+                                destOverlay.location = p
+                                invalidate()
+                                return true
+                            }
+                        }
+                        overlays.add(0, MapEventsOverlay(mapEventsReceiver))
 
                         // Detect finger touch for free map panning
                         setOnTouchListener { _, event ->
@@ -356,13 +461,31 @@ fun CircularMapPortal(
                 modifier = Modifier.fillMaxSize()
             )
 
-            // Floating Map Controls (Zoom In, Zoom Out, Recenter)
+            // Floating Map Controls (Search, Zoom In, Zoom Out, Recenter)
             Column(
                 modifier = Modifier
                     .align(Alignment.CenterEnd)
                     .padding(end = 12.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
+                // Search Address in Google Maps
+                Box(
+                    modifier = Modifier
+                        .size(36.dp)
+                        .clip(CircleShape)
+                        .background(CarSurface.copy(alpha = 0.9f))
+                        .border(1.dp, CarBorder, CircleShape)
+                        .clickable { onSearchAddress() },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Search,
+                        contentDescription = "Search Address",
+                        tint = AccentCyan,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+
                 // Zoom In
                 Box(
                     modifier = Modifier
@@ -426,32 +549,95 @@ fun CircularMapPortal(
                 }
             }
 
-            // Bottom Tap To Navigate Pill
-            Box(
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .padding(bottom = 12.dp)
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(CarSurface.copy(alpha = 0.92f))
-                    .border(1.dp, CarBorder, RoundedCornerShape(12.dp))
-                    .clickable { onOpenNavigation() }
-                    .padding(horizontal = 14.dp, vertical = 6.dp)
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
+            // Bottom Navigation Bar (Dynamic: Active Destination Navigate Pill OR Tap For Full Map)
+            val currentDest = selectedDestination
+            if (currentDest != null) {
+                Row(
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .padding(bottom = 12.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    // Navigate To Pin Button
                     Box(
                         modifier = Modifier
-                            .size(7.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(AccentGreen)
+                            .clickable {
+                                onNavigateToCoordinates(currentDest.latitude, currentDest.longitude)
+                            }
+                            .padding(horizontal = 14.dp, vertical = 7.dp)
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Navigation,
+                                contentDescription = "Start Navigation",
+                                tint = Color.Black,
+                                modifier = Modifier.size(15.dp)
+                            )
+                            Text(
+                                text = "NAVIGATE TO PIN",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.Black,
+                                letterSpacing = 0.5.sp
+                            )
+                        }
+                    }
+
+                    // Clear Pin Button
+                    Box(
+                        modifier = Modifier
+                            .size(32.dp)
                             .clip(CircleShape)
-                            .background(if (isGpsActive) AccentGreen else AccentAmber)
-                    )
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text(
-                        text = "TAP FOR FULL MAP",
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = TextSecondary,
-                        letterSpacing = 0.5.sp
-                    )
+                            .background(CarSurface.copy(alpha = 0.95f))
+                            .border(1.dp, CarBorder, CircleShape)
+                            .clickable {
+                                selectedDestination = null
+                                destinationOverlayRef?.location = null
+                                mapViewRef?.invalidate()
+                            },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Close,
+                            contentDescription = "Clear Pin",
+                            tint = TextSecondary,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+                }
+            } else {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .padding(bottom = 12.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(CarSurface.copy(alpha = 0.92f))
+                        .border(1.dp, CarBorder, RoundedCornerShape(12.dp))
+                        .clickable { onOpenNavigation() }
+                        .padding(horizontal = 14.dp, vertical = 6.dp)
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            modifier = Modifier
+                                .size(7.dp)
+                                .clip(CircleShape)
+                                .background(if (isGpsActive) AccentGreen else AccentAmber)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = "TAP FOR FULL MAP",
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = TextSecondary,
+                            letterSpacing = 0.5.sp
+                        )
+                    }
                 }
             }
         }

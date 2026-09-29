@@ -384,6 +384,14 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
+    fun launchAddressSearch() {
+        repository.launchAddressSearch()
+    }
+
+    fun launchNavigationToCoordinates(latitude: Double, longitude: Double) {
+        repository.launchNavigationToCoordinates(latitude, longitude)
+    }
+
     fun launchMusic() {
         val music = _musicApp.value
         if (music != null) {

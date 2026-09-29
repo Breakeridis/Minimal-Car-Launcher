@@ -6,6 +6,7 @@ import android.content.Intent
 import android.content.SharedPreferences
 import android.content.pm.PackageManager
 import android.content.pm.ResolveInfo
+import android.net.Uri
 import android.os.Build
 import android.widget.Toast
 import kotlinx.coroutines.Dispatchers
@@ -380,6 +381,75 @@ class AppRepository(private val context: Context) {
             context.startActivity(intent)
         } catch (e: Exception) {
             Toast.makeText(context, "Could not open Settings", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    fun launchAddressSearch(): Boolean {
+        return try {
+            val gmmIntent = Intent(Intent.ACTION_VIEW, Uri.parse("geo:0,0?q=")).apply {
+                setPackage("com.google.android.apps.maps")
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            if (gmmIntent.resolveActivity(context.packageManager) != null) {
+                context.startActivity(gmmIntent)
+                return true
+            }
+
+            val genericGeoIntent = Intent(Intent.ACTION_VIEW, Uri.parse("geo:0,0?q=")).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            if (genericGeoIntent.resolveActivity(context.packageManager) != null) {
+                context.startActivity(genericGeoIntent)
+                return true
+            }
+
+            val webIntent = Intent(Intent.ACTION_VIEW, Uri.parse("https://www.google.com/maps/search/")).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            context.startActivity(webIntent)
+            true
+        } catch (e: Exception) {
+            e.printStackTrace()
+            false
+        }
+    }
+
+    fun launchNavigationToCoordinates(latitude: Double, longitude: Double): Boolean {
+        return try {
+            val turnByTurnIntent = Intent(
+                Intent.ACTION_VIEW,
+                Uri.parse("google.navigation:q=$latitude,$longitude&mode=d")
+            ).apply {
+                setPackage("com.google.android.apps.maps")
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            if (turnByTurnIntent.resolveActivity(context.packageManager) != null) {
+                context.startActivity(turnByTurnIntent)
+                return true
+            }
+
+            val geoIntent = Intent(
+                Intent.ACTION_VIEW,
+                Uri.parse("geo:$latitude,$longitude?q=$latitude,$longitude(Destination)")
+            ).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            if (geoIntent.resolveActivity(context.packageManager) != null) {
+                context.startActivity(geoIntent)
+                return true
+            }
+
+            val webIntent = Intent(
+                Intent.ACTION_VIEW,
+                Uri.parse("https://www.google.com/maps/dir/?api=1&destination=$latitude,$longitude")
+            ).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            context.startActivity(webIntent)
+            true
+        } catch (e: Exception) {
+            e.printStackTrace()
+            false
         }
     }
 }

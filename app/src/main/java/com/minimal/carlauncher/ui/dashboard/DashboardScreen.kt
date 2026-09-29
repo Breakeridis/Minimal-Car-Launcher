@@ -118,6 +118,8 @@ fun DashboardScreen(
                     cardinalDirection = cardinalDirection,
                     isGpsActive = isGpsActive,
                     onOpenNavigation = { viewModel.launchNavigation() },
+                    onSearchAddress = { viewModel.launchAddressSearch() },
+                    onNavigateToCoordinates = { lat, lon -> viewModel.launchNavigationToCoordinates(lat, lon) },
                     modifier = Modifier.fillMaxHeight()
                 )
 
