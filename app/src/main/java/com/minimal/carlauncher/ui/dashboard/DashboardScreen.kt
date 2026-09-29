@@ -37,6 +37,11 @@ fun DashboardScreen(
 
     val currentSpeed by viewModel.speedometer.currentSpeed.collectAsState()
     val speedUnit by viewModel.speedometer.unit.collectAsState()
+    val speedKmH = if (speedUnit == com.minimal.carlauncher.service.SpeedUnit.KMH) {
+        currentSpeed.toFloat()
+    } else {
+        currentSpeed * 1.60934f
+    }
     val bearing by viewModel.speedometer.bearing.collectAsState()
     val cardinalDirection by viewModel.speedometer.cardinalDirection.collectAsState()
     val currentLocation by viewModel.speedometer.currentLocation.collectAsState()
@@ -123,6 +128,7 @@ fun DashboardScreen(
                     location = currentLocation,
                     bearing = bearing,
                     cardinalDirection = cardinalDirection,
+                    speedKmH = speedKmH,
                     isGpsActive = isGpsActive,
                     activeRoute = activeRoute,
                     isNavigating = isNavigating,

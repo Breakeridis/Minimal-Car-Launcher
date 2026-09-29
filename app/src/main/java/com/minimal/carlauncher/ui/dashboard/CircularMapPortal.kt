@@ -231,12 +231,31 @@ private class DestinationMarkerOverlay(private val density: Float) : Overlay() {
     }
 }
 
+/**
+ * Calculates automotive adaptive camera zoom based on vehicle speed in km/h.
+ * - Low speed / crawling / stopped (0 - 15 km/h): Zoom 17.5 (close-up street & intersection detail)
+ * - City driving (15 - 40 km/h): Zoom 17.5 -> 16.7
+ * - Arterials / ring roads (40 - 70 km/h): Zoom 16.7 -> 15.8
+ * - Fast suburban / expressways (70 - 100 km/h): Zoom 15.8 -> 14.8
+ * - Highway / Motorway (> 100 km/h): Zoom 14.8 -> 13.5 (broad horizon & interchange visibility)
+ */
+private fun calculateTargetZoomForSpeed(speedKmH: Float): Double {
+    return when {
+        speedKmH <= 15f -> 17.5
+        speedKmH <= 40f -> 17.5 - ((speedKmH - 15f) / 25f) * 0.8
+        speedKmH <= 70f -> 16.7 - ((speedKmH - 40f) / 30f) * 0.9
+        speedKmH <= 100f -> 15.8 - ((speedKmH - 70f) / 30f) * 1.0
+        else -> (14.8 - ((speedKmH - 100f) / 40f) * 0.8).coerceAtLeast(13.5)
+    }
+}
+
 @SuppressLint("ClickableViewAccessibility")
 @Composable
 fun CircularMapPortal(
     location: Location?,
     bearing: Float,
     cardinalDirection: String,
+    speedKmH: Float = 0f,
     isGpsActive: Boolean,
     activeRoute: NavigationRoute? = null,
     isNavigating: Boolean = false,
@@ -259,6 +278,7 @@ fun CircularMapPortal(
     var selectedDestination by remember { mutableStateOf<GeoPoint?>(null) }
     var isUserPanning by remember { mutableStateOf(false) }
     var lastPanTimestamp by remember { mutableLongStateOf(0L) }
+    var currentZoom by remember { mutableDoubleStateOf(16.5) }
 
     // Sync route polylines whenever activeRoute changes
     LaunchedEffect(activeRoute) {
@@ -297,7 +317,7 @@ fun CircularMapPortal(
     var isFirstFix by remember { mutableStateOf(true) }
 
     // Smooth 60fps continuous interpolation for car movement & course-up map rotation
-    LaunchedEffect(location, bearing) {
+    LaunchedEffect(location, bearing, speedKmH) {
         val targetLat = location?.latitude ?: currentLat
         val targetLon = location?.longitude ?: currentLon
         val targetBearing = bearing
@@ -309,9 +329,13 @@ fun CircularMapPortal(
             currentBearing = targetBearing
             dialRotation = targetBearing
 
+            val initialZoom = calculateTargetZoomForSpeed(speedKmH)
+            currentZoom = initialZoom
+
             val pt = GeoPoint(targetLat, targetLon)
             vehicleOverlayRef?.location = pt
             mapViewRef?.controller?.setCenter(pt)
+            mapViewRef?.controller?.setZoom(initialZoom)
             mapViewRef?.mapOrientation = -targetBearing
             mapViewRef?.invalidate()
             return@LaunchedEffect
@@ -345,6 +369,14 @@ fun CircularMapPortal(
             if (!isUserPanning) {
                 mapViewRef?.controller?.setCenter(currentPoint)
                 mapViewRef?.mapOrientation = -normBearing
+
+                // Automated speed-based dynamic zooming when centered on vehicle
+                val targetZoom = calculateTargetZoomForSpeed(speedKmH)
+                val zoomDiff = targetZoom - currentZoom
+                if (kotlin.math.abs(zoomDiff) > 0.01) {
+                    currentZoom += zoomDiff * 0.04
+                    mapViewRef?.controller?.setZoom(currentZoom)
+                }
             }
             mapViewRef?.invalidate()
 
@@ -353,13 +385,14 @@ fun CircularMapPortal(
         }
     }
 
-    // Auto-recenter back to vehicle after 15 seconds of pan inactivity
+    // Auto-recenter back to vehicle after 1 minute (60 seconds) of pan/manual idle
     LaunchedEffect(isUserPanning, lastPanTimestamp) {
         if (isUserPanning) {
-            delay(15_000L)
+            delay(60_000L) // 1 minute idle timeout
             isUserPanning = false
             val pt = GeoPoint(currentLat, currentLon)
             mapViewRef?.controller?.animateTo(pt)
+            currentZoom = mapViewRef?.zoomLevelDouble ?: currentZoom
         }
     }
 
@@ -501,9 +534,9 @@ fun CircularMapPortal(
                         }
                         overlays.add(0, MapEventsOverlay(mapEventsReceiver))
 
-                        // Detect finger touch for free map panning
+                        // Detect finger touch for free map panning & multi-touch pinch zoom
                         setOnTouchListener { _, event ->
-                            if (event.action == MotionEvent.ACTION_DOWN || event.action == MotionEvent.ACTION_MOVE) {
+                            if (event.action == MotionEvent.ACTION_DOWN || event.action == MotionEvent.ACTION_MOVE || event.pointerCount > 1) {
                                 isUserPanning = true
                                 lastPanTimestamp = SystemClock.elapsedRealtime()
                             }
@@ -548,7 +581,12 @@ fun CircularMapPortal(
                         .clip(CircleShape)
                         .background(CarSurface.copy(alpha = 0.9f))
                         .border(1.dp, CarBorder, CircleShape)
-                        .clickable { mapViewRef?.controller?.zoomIn() },
+                        .clickable {
+                            isUserPanning = true
+                            lastPanTimestamp = SystemClock.elapsedRealtime()
+                            mapViewRef?.controller?.zoomIn()
+                            currentZoom = (mapViewRef?.zoomLevelDouble ?: currentZoom) + 1.0
+                        },
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
@@ -566,7 +604,12 @@ fun CircularMapPortal(
                         .clip(CircleShape)
                         .background(CarSurface.copy(alpha = 0.9f))
                         .border(1.dp, CarBorder, CircleShape)
-                        .clickable { mapViewRef?.controller?.zoomOut() },
+                        .clickable {
+                            isUserPanning = true
+                            lastPanTimestamp = SystemClock.elapsedRealtime()
+                            mapViewRef?.controller?.zoomOut()
+                            currentZoom = (mapViewRef?.zoomLevelDouble ?: currentZoom) - 1.0
+                        },
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
@@ -592,6 +635,7 @@ fun CircularMapPortal(
                             isUserPanning = false
                             val pt = GeoPoint(currentLat, currentLon)
                             mapViewRef?.controller?.animateTo(pt)
+                            currentZoom = mapViewRef?.zoomLevelDouble ?: currentZoom
                         },
                     contentAlignment = Alignment.Center
                 ) {
