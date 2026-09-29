@@ -41,6 +41,7 @@ import com.minimal.carlauncher.ui.theme.CarSurface
 import com.minimal.carlauncher.ui.theme.CarSurfaceVariant
 import com.minimal.carlauncher.ui.theme.TextMuted
 import com.minimal.carlauncher.ui.theme.TextPrimary
+import com.minimal.carlauncher.ui.theme.TextSecondary
 import com.minimal.carlauncher.util.BitmapHelper
 
 @OptIn(ExperimentalFoundationApi::class)
