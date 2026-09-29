@@ -83,67 +83,77 @@ fun DashboardScreen(
         modifier = modifier
             .fillMaxSize()
             .background(CarBg)
-            .padding(18.dp)
+            .padding(14.dp)
     ) {
-        Column(
+        Row(
             modifier = Modifier.fillMaxSize(),
-            verticalArrangement = Arrangement.SpaceBetween
+            horizontalArrangement = Arrangement.spacedBy(14.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            // Main Top & Middle Section (Left: Telemetry, Right: Hero Launch Cards)
-            Row(
+            // Left Column: Telemetry (Clock, Speedometer) + Left Bottom Dock (Apps, Pinned, +)
+            Column(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f),
-                horizontalArrangement = Arrangement.spacedBy(16.dp),
-                verticalAlignment = Alignment.CenterVertically
+                    .weight(1f)
+                    .fillMaxHeight(),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                // Left Column: Clock + Speedometer
-                Column(
+                ClockWidget(
+                    time = currentTime,
+                    seconds = currentSeconds,
+                    date = currentDate,
                     modifier = Modifier
+                        .fillMaxWidth()
                         .weight(1f)
-                        .fillMaxHeight(),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    ClockWidget(
-                        time = currentTime,
-                        seconds = currentSeconds,
-                        date = currentDate,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .weight(1f)
-                    )
-
-                    SpeedometerWidget(
-                        speed = currentSpeed,
-                        unit = speedUnit,
-                        isGpsActive = isGpsActive,
-                        onToggleUnit = { viewModel.toggleSpeedUnit() },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .weight(1.3f)
-                    )
-                }
-
-                // Center Column: Master Circular Moving Map Portal
-                CircularMapPortal(
-                    location = currentLocation,
-                    bearing = bearing,
-                    cardinalDirection = cardinalDirection,
-                    speedKmH = speedKmH,
-                    isGpsActive = isGpsActive,
-                    activeRoute = activeRoute,
-                    isNavigating = isNavigating,
-                    isCalculatingRoute = isCalculatingRoute,
-                    onStartNavigation = { dest ->
-                        viewModel.startNavigationTo(dest.latitude, dest.longitude)
-                    },
-                    onStopNavigation = { viewModel.stopNavigation() },
-                    onOpenSearch = { viewModel.openAddressSearch() },
-                    onOpenNavigation = { viewModel.launchNavigation() },
-                    modifier = Modifier.fillMaxHeight()
                 )
 
-                // Right Column: Quick-Launch Tiles (Phone Projection, Dashcam, Music/Radio, Navigation)
+                SpeedometerWidget(
+                    speed = currentSpeed,
+                    unit = speedUnit,
+                    isGpsActive = isGpsActive,
+                    onToggleUnit = { viewModel.toggleSpeedUnit() },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1.3f)
+                )
+
+                LeftBottomDock(
+                    pinnedApps = pinnedApps,
+                    onOpenAppDrawer = { viewModel.openAppDrawer() },
+                    onLaunchApp = { app -> viewModel.launchApp(app) },
+                    onLongClickApp = { app -> viewModel.onDockAppLongClick(app) },
+                    onAddApp = { viewModel.openAddDockPicker() },
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+
+            // Center Column: Master Circular Moving Map Portal (FULL VERTICAL SPACE AVAILABLE)
+            CircularMapPortal(
+                location = currentLocation,
+                bearing = bearing,
+                cardinalDirection = cardinalDirection,
+                speedKmH = speedKmH,
+                isGpsActive = isGpsActive,
+                activeRoute = activeRoute,
+                isNavigating = isNavigating,
+                isCalculatingRoute = isCalculatingRoute,
+                onStartNavigation = { dest ->
+                    viewModel.startNavigationTo(dest.latitude, dest.longitude)
+                },
+                onStopNavigation = { viewModel.stopNavigation() },
+                onOpenSearch = { viewModel.openAddressSearch() },
+                onOpenNavigation = { viewModel.launchNavigation() },
+                modifier = Modifier
+                    .fillMaxHeight()
+                    .aspectRatio(1f)
+            )
+
+            // Right Column: Quick-Launch Tiles + Right Bottom Dock (About, Settings)
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxHeight(),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
                 QuickLaunchCards(
                     dvrApp = dvrApp,
                     zlinkLabel = zlinkApp?.label ?: "ZLink",
@@ -158,24 +168,17 @@ fun DashboardScreen(
                     onLongClickNavigation = { viewModel.openNavPicker() },
                     onLongClickMusic = { viewModel.openMusicPicker() },
                     modifier = Modifier
+                        .fillMaxWidth()
                         .weight(1f)
-                        .fillMaxHeight()
+                )
+
+                RightBottomDock(
+                    onOpenAbout = { viewModel.openAboutDialog() },
+                    onOpenSettings = { viewModel.launchSettings() },
+                    isUpdateAvailable = updateInfo?.isUpdateAvailable == true,
+                    modifier = Modifier.fillMaxWidth()
                 )
             }
-
-            Spacer(modifier = Modifier.height(14.dp))
-
-            // Bottom Persistent Dock
-            BottomDock(
-                pinnedApps = pinnedApps,
-                onOpenAppDrawer = { viewModel.openAppDrawer() },
-                onLaunchApp = { app -> viewModel.launchApp(app) },
-                onLongClickApp = { app -> viewModel.onDockAppLongClick(app) },
-                onAddApp = { viewModel.openAddDockPicker() },
-                onOpenAbout = { viewModel.openAboutDialog() },
-                onOpenSettings = { viewModel.launchSettings() },
-                isUpdateAvailable = updateInfo?.isUpdateAvailable == true
-            )
         }
 
         // Overlay All Apps Drawer

@@ -70,7 +70,7 @@ fun QuickLaunchCards(
     modifier: Modifier = Modifier
 ) {
     Column(
-        modifier = modifier.fillMaxHeight(),
+        modifier = modifier,
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
         // 1. Phone Projection (ZLink)
