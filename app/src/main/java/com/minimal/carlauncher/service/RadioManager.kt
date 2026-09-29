@@ -239,6 +239,7 @@ class RadioManager(private val context: Context) {
                 arrayOf("name", "value"),
                 null, null, null
             )
+            var foundFreq: String? = null
             cursor?.use { c ->
                 val nameCol = c.getColumnIndex("name")
                 val valCol = c.getColumnIndex("value")
@@ -256,14 +257,15 @@ class RadioManager(private val context: Context) {
                             if (value.isNotBlank() && value != "0" && value != "-1") {
                                 val formatted = formatFrequency(value, null, null)
                                 if (formatted != null) {
-                                    return@use value
+                                    foundFreq = value
+                                    break
                                 }
                             }
                         }
                     }
                 }
             }
-            null
+            foundFreq
         } catch (e: Throwable) {
             null
         }
