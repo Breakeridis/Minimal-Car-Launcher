@@ -58,9 +58,11 @@ import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
+import com.minimal.carlauncher.service.NavigationRoute
 import com.minimal.carlauncher.ui.theme.AccentAmber
 import com.minimal.carlauncher.ui.theme.AccentCyan
 import com.minimal.carlauncher.ui.theme.AccentGreen
@@ -77,7 +79,9 @@ import org.osmdroid.util.GeoPoint
 import org.osmdroid.views.MapView
 import org.osmdroid.views.overlay.MapEventsOverlay
 import org.osmdroid.views.overlay.Overlay
+import org.osmdroid.views.overlay.Polyline
 import java.io.File
+import java.util.Locale
 import kotlin.math.roundToInt
 
 /**
@@ -234,9 +238,13 @@ fun CircularMapPortal(
     bearing: Float,
     cardinalDirection: String,
     isGpsActive: Boolean,
-    onOpenNavigation: () -> Unit,
-    onSearchAddress: () -> Unit = {},
-    onNavigateToCoordinates: (Double, Double) -> Unit = { _, _ -> },
+    activeRoute: NavigationRoute? = null,
+    isNavigating: Boolean = false,
+    isCalculatingRoute: Boolean = false,
+    onStartNavigation: (GeoPoint) -> Unit = {},
+    onStopNavigation: () -> Unit = {},
+    onOpenSearch: () -> Unit = {},
+    onOpenNavigation: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -246,9 +254,27 @@ fun CircularMapPortal(
     var mapViewRef by remember { mutableStateOf<MapView?>(null) }
     var vehicleOverlayRef by remember { mutableStateOf<VehicleMarkerOverlay?>(null) }
     var destinationOverlayRef by remember { mutableStateOf<DestinationMarkerOverlay?>(null) }
+    var routeCasingRef by remember { mutableStateOf<Polyline?>(null) }
+    var routeCoreRef by remember { mutableStateOf<Polyline?>(null) }
     var selectedDestination by remember { mutableStateOf<GeoPoint?>(null) }
     var isUserPanning by remember { mutableStateOf(false) }
     var lastPanTimestamp by remember { mutableLongStateOf(0L) }
+
+    // Sync route polylines whenever activeRoute changes
+    LaunchedEffect(activeRoute) {
+        val pts = activeRoute?.points ?: emptyList()
+        routeCasingRef?.setPoints(pts)
+        routeCoreRef?.setPoints(pts)
+        if (pts.isNotEmpty()) {
+            val endPt = pts.last()
+            selectedDestination = endPt
+            destinationOverlayRef?.location = endPt
+        } else if (!isNavigating) {
+            selectedDestination = null
+            destinationOverlayRef?.location = null
+        }
+        mapViewRef?.invalidate()
+    }
 
     // Initialize osmdroid configuration safely
     remember {
@@ -414,9 +440,36 @@ fun CircularMapPortal(
                         )
                         overlayManager.tilesOverlay.setColorFilter(ColorMatrixColorFilter(darkMatrix))
 
+                        // Add Route Polylines (Casing + Core)
+                        val routeCasing = Polyline(this).apply {
+                            outlinePaint.apply {
+                                color = android.graphics.Color.parseColor("#0F172A")
+                                strokeWidth = 14f * screenDensity
+                                strokeCap = android.graphics.Paint.Cap.ROUND
+                                strokeJoin = android.graphics.Paint.Join.ROUND
+                                isAntiAlias = true
+                            }
+                            setPoints(activeRoute?.points ?: emptyList())
+                        }
+                        overlays.add(routeCasing)
+                        routeCasingRef = routeCasing
+
+                        val routeCore = Polyline(this).apply {
+                            outlinePaint.apply {
+                                color = android.graphics.Color.parseColor("#00F0FF")
+                                strokeWidth = 8f * screenDensity
+                                strokeCap = android.graphics.Paint.Cap.ROUND
+                                strokeJoin = android.graphics.Paint.Join.ROUND
+                                isAntiAlias = true
+                            }
+                            setPoints(activeRoute?.points ?: emptyList())
+                        }
+                        overlays.add(routeCore)
+                        routeCoreRef = routeCore
+
                         // Add Destination Marker Map Overlay
                         val destOverlay = DestinationMarkerOverlay(screenDensity).apply {
-                            this.location = selectedDestination
+                            this.location = activeRoute?.points?.lastOrNull() ?: selectedDestination
                         }
                         overlays.add(destOverlay)
                         destinationOverlayRef = destOverlay
@@ -431,6 +484,7 @@ fun CircularMapPortal(
                         // Add MapEventsOverlay to capture tap and long-press coordinates
                         val mapEventsReceiver = object : MapEventsReceiver {
                             override fun singleTapConfirmedHelper(p: GeoPoint): Boolean {
+                                if (isNavigating) return false
                                 selectedDestination = p
                                 destOverlay.location = p
                                 invalidate()
@@ -438,6 +492,7 @@ fun CircularMapPortal(
                             }
 
                             override fun longPressHelper(p: GeoPoint): Boolean {
+                                if (isNavigating) return false
                                 selectedDestination = p
                                 destOverlay.location = p
                                 invalidate()
@@ -468,14 +523,14 @@ fun CircularMapPortal(
                     .padding(end = 12.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                // Search Address in Google Maps
+                // Search Address Autocomplete
                 Box(
                     modifier = Modifier
                         .size(36.dp)
                         .clip(CircleShape)
                         .background(CarSurface.copy(alpha = 0.9f))
                         .border(1.dp, CarBorder, CircleShape)
-                        .clickable { onSearchAddress() },
+                        .clickable { onOpenSearch() },
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
@@ -549,94 +604,202 @@ fun CircularMapPortal(
                 }
             }
 
-            // Bottom Navigation Bar (Dynamic: Active Destination Navigate Pill OR Tap For Full Map)
-            val currentDest = selectedDestination
-            if (currentDest != null) {
-                Row(
-                    modifier = Modifier
-                        .align(Alignment.BottomCenter)
-                        .padding(bottom = 12.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    // Navigate To Pin Button
+            // Bottom Navigation Bar
+            when {
+                isCalculatingRoute -> {
                     Box(
                         modifier = Modifier
+                            .align(Alignment.BottomCenter)
+                            .padding(bottom = 12.dp)
                             .clip(RoundedCornerShape(12.dp))
-                            .background(AccentGreen)
-                            .clickable {
-                                onNavigateToCoordinates(currentDest.latitude, currentDest.longitude)
-                            }
+                            .background(CarSurface.copy(alpha = 0.95f))
+                            .border(1.dp, AccentCyan, RoundedCornerShape(12.dp))
                             .padding(horizontal = 14.dp, vertical = 7.dp)
                     ) {
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            Icon(
-                                imageVector = Icons.Default.Navigation,
-                                contentDescription = "Start Navigation",
-                                tint = Color.Black,
-                                modifier = Modifier.size(15.dp)
+                            androidx.compose.material3.CircularProgressIndicator(
+                                modifier = Modifier.size(13.dp),
+                                color = AccentCyan,
+                                strokeWidth = 2.dp
                             )
                             Text(
-                                text = "NAVIGATE TO PIN",
+                                text = "CALCULATING ROUTE...",
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.Bold,
-                                color = Color.Black,
+                                color = AccentCyan,
                                 letterSpacing = 0.5.sp
                             )
                         }
                     }
-
-                    // Clear Pin Button
-                    Box(
-                        modifier = Modifier
-                            .size(32.dp)
-                            .clip(CircleShape)
-                            .background(CarSurface.copy(alpha = 0.95f))
-                            .border(1.dp, CarBorder, CircleShape)
-                            .clickable {
-                                selectedDestination = null
-                                destinationOverlayRef?.location = null
-                                mapViewRef?.invalidate()
-                            },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Close,
-                            contentDescription = "Clear Pin",
-                            tint = TextSecondary,
-                            modifier = Modifier.size(16.dp)
-                        )
-                    }
                 }
-            } else {
-                Box(
-                    modifier = Modifier
-                        .align(Alignment.BottomCenter)
-                        .padding(bottom = 12.dp)
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(CarSurface.copy(alpha = 0.92f))
-                        .border(1.dp, CarBorder, RoundedCornerShape(12.dp))
-                        .clickable { onOpenNavigation() }
-                        .padding(horizontal = 14.dp, vertical = 6.dp)
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
+
+                isNavigating && activeRoute != null -> {
+                    val distKm = activeRoute.distanceMeters / 1000.0
+                    val distText = if (distKm < 1.0) {
+                        "${activeRoute.distanceMeters.roundToInt()} m"
+                    } else {
+                        String.format(Locale.US, "%.1f km", distKm)
+                    }
+
+                    val mins = (activeRoute.durationSeconds / 60.0).roundToInt()
+                    val timeText = if (mins < 60) "${mins} min" else "${mins / 60}h ${mins % 60}m"
+
+                    Row(
+                        modifier = Modifier
+                            .align(Alignment.BottomCenter)
+                            .padding(bottom = 12.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        // Route Telemetry (Distance & ETA)
                         Box(
                             modifier = Modifier
-                                .size(7.dp)
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(Color(0xFF0F172A).copy(alpha = 0.96f))
+                                .border(1.dp, AccentGreen.copy(alpha = 0.8f), RoundedCornerShape(12.dp))
+                                .padding(horizontal = 12.dp, vertical = 7.dp)
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(7.dp)
+                                        .clip(CircleShape)
+                                        .background(AccentGreen)
+                                )
+                                Text(
+                                    text = "$distText • $timeText",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = AccentGreen,
+                                    letterSpacing = 0.5.sp
+                                )
+                            }
+                        }
+
+                        // Stop Navigation Button
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(Color(0xFFEF4444))
+                                .clickable { onStopNavigation() }
+                                .padding(horizontal = 12.dp, vertical = 7.dp)
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Close,
+                                    contentDescription = "Stop Navigation",
+                                    tint = Color.White,
+                                    modifier = Modifier.size(14.dp)
+                                )
+                                Text(
+                                    text = "STOP",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color.White,
+                                    letterSpacing = 0.5.sp
+                                )
+                            }
+                        }
+                    }
+                }
+
+                selectedDestination != null -> {
+                    val dest = selectedDestination!!
+                    Row(
+                        modifier = Modifier
+                            .align(Alignment.BottomCenter)
+                            .padding(bottom = 12.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        // Start Navigation Button
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(AccentGreen)
+                                .clickable { onStartNavigation(dest) }
+                                .padding(horizontal = 14.dp, vertical = 7.dp)
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Navigation,
+                                    contentDescription = "Start Navigation",
+                                    tint = Color.Black,
+                                    modifier = Modifier.size(15.dp)
+                                )
+                                Text(
+                                    text = "START NAVIGATION",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color.Black,
+                                    letterSpacing = 0.5.sp
+                                )
+                            }
+                        }
+
+                        // Clear Pin Button
+                        Box(
+                            modifier = Modifier
+                                .size(32.dp)
                                 .clip(CircleShape)
-                                .background(if (isGpsActive) AccentGreen else AccentAmber)
-                        )
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text(
-                            text = "TAP FOR FULL MAP",
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = TextSecondary,
-                            letterSpacing = 0.5.sp
-                        )
+                                .background(CarSurface.copy(alpha = 0.95f))
+                                .border(1.dp, CarBorder, CircleShape)
+                                .clickable {
+                                    selectedDestination = null
+                                    destinationOverlayRef?.location = null
+                                    mapViewRef?.invalidate()
+                                },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Close,
+                                contentDescription = "Clear Pin",
+                                tint = TextSecondary,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
+                    }
+                }
+
+                else -> {
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.BottomCenter)
+                            .padding(bottom = 12.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(CarSurface.copy(alpha = 0.92f))
+                            .border(1.dp, CarBorder, RoundedCornerShape(12.dp))
+                            .clickable { onOpenNavigation() }
+                            .padding(horizontal = 14.dp, vertical = 6.dp)
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(
+                                modifier = Modifier
+                                    .size(7.dp)
+                                    .clip(CircleShape)
+                                    .background(if (isGpsActive) AccentGreen else AccentAmber)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = "TAP FOR FULL MAP",
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = TextSecondary,
+                                letterSpacing = 0.5.sp
+                            )
+                        }
                     }
                 }
             }
@@ -789,23 +952,61 @@ fun CircularMapPortal(
             }
         }
 
-        // Top Floating Heading Pill
-        Box(
-            modifier = Modifier
-                .align(Alignment.TopCenter)
-                .padding(top = 10.dp)
-                .clip(RoundedCornerShape(8.dp))
-                .background(CarSurface.copy(alpha = 0.95f))
-                .border(1.dp, CarBorder, RoundedCornerShape(8.dp))
-                .padding(horizontal = 10.dp, vertical = 3.dp)
-        ) {
-            Text(
-                text = "$cardinalDirection • ${bearing.roundToInt()}°",
-                fontSize = 11.sp,
-                fontWeight = FontWeight.Bold,
-                color = AccentCyan,
-                letterSpacing = 0.5.sp
-            )
+        // Top Floating Pill: Navigation Next Turn Maneuver OR Compass Heading
+        if (isNavigating && activeRoute != null) {
+            val steps = activeRoute.steps
+            val nextStep = steps.firstOrNull()
+            val instructionText = nextStep?.instruction ?: "Navigating to ${activeRoute.destinationName.ifBlank { "Destination" }}"
+
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .padding(top = 10.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(Color(0xFF0F172A).copy(alpha = 0.96f))
+                    .border(1.dp, AccentCyan.copy(alpha = 0.8f), RoundedCornerShape(8.dp))
+                    .padding(horizontal = 12.dp, vertical = 4.dp)
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Navigation,
+                        contentDescription = null,
+                        tint = AccentCyan,
+                        modifier = Modifier.size(13.dp)
+                    )
+                    Text(
+                        text = instructionText,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = TextPrimary,
+                        letterSpacing = 0.3.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+            }
+        } else {
+            // Normal Heading Pill
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .padding(top = 10.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(CarSurface.copy(alpha = 0.95f))
+                    .border(1.dp, CarBorder, RoundedCornerShape(8.dp))
+                    .padding(horizontal = 10.dp, vertical = 3.dp)
+            ) {
+                Text(
+                    text = "$cardinalDirection • ${bearing.roundToInt()}°",
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = AccentCyan,
+                    letterSpacing = 0.5.sp
+                )
+            }
         }
     }
 }

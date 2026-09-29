@@ -18,6 +18,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.minimal.carlauncher.ui.dialogs.AboutDialog
+import com.minimal.carlauncher.ui.dialogs.AddressSearchDialog
 import com.minimal.carlauncher.ui.dialogs.AppPickerDialog
 import com.minimal.carlauncher.ui.dialogs.DockActionDialog
 import com.minimal.carlauncher.ui.dialogs.DrawerActionDialog
@@ -65,6 +66,12 @@ fun DashboardScreen(
     val isCheckingUpdate by viewModel.isCheckingUpdate.collectAsState()
     val updateInfo by viewModel.updateInfo.collectAsState()
     val updateProgress by viewModel.updateDownloadProgress.collectAsState()
+
+    // Minimap Navigation State
+    val isSearchDialogOpen by viewModel.isAddressSearchOpen.collectAsState()
+    val activeRoute by viewModel.activeRoute.collectAsState()
+    val isNavigating by viewModel.isNavigating.collectAsState()
+    val isCalculatingRoute by viewModel.isCalculatingRoute.collectAsState()
 
     Box(
         modifier = modifier
@@ -117,9 +124,15 @@ fun DashboardScreen(
                     bearing = bearing,
                     cardinalDirection = cardinalDirection,
                     isGpsActive = isGpsActive,
+                    activeRoute = activeRoute,
+                    isNavigating = isNavigating,
+                    isCalculatingRoute = isCalculatingRoute,
+                    onStartNavigation = { dest ->
+                        viewModel.startNavigationTo(dest.latitude, dest.longitude)
+                    },
+                    onStopNavigation = { viewModel.stopNavigation() },
+                    onOpenSearch = { viewModel.openAddressSearch() },
                     onOpenNavigation = { viewModel.launchNavigation() },
-                    onSearchAddress = { viewModel.launchAddressSearch() },
-                    onNavigateToCoordinates = { lat, lon -> viewModel.launchNavigationToCoordinates(lat, lon) },
                     modifier = Modifier.fillMaxHeight()
                 )
 
@@ -229,6 +242,17 @@ fun DashboardScreen(
             onCheckUpdate = { viewModel.checkForUpdates(isManualCheck = true) },
             onInstall = { viewModel.startDownloadAndInstall() },
             onDismiss = { viewModel.dismissAboutDialog() }
+        )
+
+        // Address Search Autocomplete Dialog
+        AddressSearchDialog(
+            isOpen = isSearchDialogOpen,
+            currentLat = currentLocation?.latitude ?: 37.9838,
+            currentLon = currentLocation?.longitude ?: 23.7275,
+            onSelectDestination = { lat, lon, name ->
+                viewModel.startNavigationTo(lat, lon, name)
+            },
+            onDismiss = { viewModel.closeAddressSearch() }
         )
     }
 }

@@ -6,10 +6,13 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.minimal.carlauncher.data.AppInfo
 import com.minimal.carlauncher.data.AppRepository
+import com.minimal.carlauncher.service.NavigationRoute
+import com.minimal.carlauncher.service.NavigationService
 import com.minimal.carlauncher.service.RadioManager
 import com.minimal.carlauncher.service.SpeedometerManager
 import com.minimal.carlauncher.service.UpdateInfo
 import com.minimal.carlauncher.service.UpdateManager
+import org.osmdroid.util.GeoPoint
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -95,6 +98,25 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
 
     private val _isDvrPickerOpen = MutableStateFlow(false)
     val isDvrPickerOpen: StateFlow<Boolean> = _isDvrPickerOpen.asStateFlow()
+
+    // Minimap In-App Live Navigation & Search State
+    private val _isAddressSearchOpen = MutableStateFlow(false)
+    val isAddressSearchOpen: StateFlow<Boolean> = _isAddressSearchOpen.asStateFlow()
+
+    private val _activeRoute = MutableStateFlow<NavigationRoute?>(null)
+    val activeRoute: StateFlow<NavigationRoute?> = _activeRoute.asStateFlow()
+
+    private val _isNavigating = MutableStateFlow(false)
+    val isNavigating: StateFlow<Boolean> = _isNavigating.asStateFlow()
+
+    private val _isCalculatingRoute = MutableStateFlow(false)
+    val isCalculatingRoute: StateFlow<Boolean> = _isCalculatingRoute.asStateFlow()
+
+    private val _navigationDestination = MutableStateFlow<GeoPoint?>(null)
+    val navigationDestination: StateFlow<GeoPoint?> = _navigationDestination.asStateFlow()
+
+    private val _navigationDestinationName = MutableStateFlow("")
+    val navigationDestinationName: StateFlow<String> = _navigationDestinationName.asStateFlow()
 
     // About & In-App Updater State
     val currentVersion: String = updateManager.getCurrentVersionName()
@@ -382,6 +404,40 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
                 openAppDrawer()
             }
         }
+    }
+
+    fun openAddressSearch() {
+        _isAddressSearchOpen.value = true
+    }
+
+    fun closeAddressSearch() {
+        _isAddressSearchOpen.value = false
+    }
+
+    fun startNavigationTo(destLat: Double, destLon: Double, destName: String = "Destination") {
+        viewModelScope.launch {
+            _isCalculatingRoute.value = true
+            _navigationDestination.value = GeoPoint(destLat, destLon)
+            _navigationDestinationName.value = destName
+            _isAddressSearchOpen.value = false
+
+            val currentLoc = speedometer.currentLocation.value
+            val startLat = currentLoc?.latitude ?: 37.9838
+            val startLon = currentLoc?.longitude ?: 23.7275
+
+            val route = NavigationService.fetchRoute(startLat, startLon, destLat, destLon, destName)
+            _activeRoute.value = route
+            _isNavigating.value = (route != null)
+            _isCalculatingRoute.value = false
+        }
+    }
+
+    fun stopNavigation() {
+        _isNavigating.value = false
+        _activeRoute.value = null
+        _navigationDestination.value = null
+        _navigationDestinationName.value = ""
+        _isCalculatingRoute.value = false
     }
 
     fun launchAddressSearch() {
