@@ -436,8 +436,9 @@ class RadioManager(private val context: Context) {
                     }
                 }
 
-                if (foundFreq != null) {
-                    return Triple(foundFreq, foundName, foundBand)
+                val finalFreq = foundFreq
+                if (finalFreq != null) {
+                    return Triple(finalFreq, foundName, foundBand)
                 }
             } catch (e: Throwable) {
                 // Ignore security exceptions on restricted tables
