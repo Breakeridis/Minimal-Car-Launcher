@@ -266,7 +266,7 @@ class AppRepository(private val context: Context) {
         prefs.edit().putString(KEY_CUSTOM_DVR_PACKAGE, packageName).apply()
     }
 
-    fun isDvrAutoStartEnabled(): Boolean = prefs.getBoolean(KEY_DVR_AUTOSTART_ENABLED, true)
+    fun isDvrAutoStartEnabled(): Boolean = prefs.getBoolean(KEY_DVR_AUTOSTART_ENABLED, false)
 
     fun setDvrAutoStartEnabled(enabled: Boolean) {
         prefs.edit().putBoolean(KEY_DVR_AUTOSTART_ENABLED, enabled).apply()

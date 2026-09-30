@@ -163,14 +163,8 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
             val dvr = repository.resolveDvrApp(apps)
             _dvrApp.value = dvr
 
-            // Auto-start DVR app on initial boot if enabled
-            if (!hasAutoStartedDvr && repository.isDvrAutoStartEnabled() && dvr != null) {
-                hasAutoStartedDvr = true
-                viewModelScope.launch {
-                    delay(1200L)
-                    repository.launchApp(dvr)
-                }
-            }
+            // Auto-start DVR app disabled so camera is not procced by launcher (head unit handles it natively)
+            hasAutoStartedDvr = true
         }
     }
 
