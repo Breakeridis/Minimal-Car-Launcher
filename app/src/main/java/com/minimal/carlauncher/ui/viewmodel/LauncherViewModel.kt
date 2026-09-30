@@ -35,6 +35,7 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
 
     val radioStation: StateFlow<String?> = radioManager.radioStation
     val isRadioActive: StateFlow<Boolean> = radioManager.isRadioActive
+    val savedRadioStations: StateFlow<List<String>> = radioManager.savedStations
 
     // Applications State
     private val _allApps = MutableStateFlow<List<AppInfo>>(emptyList())
@@ -534,6 +535,17 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
 
     fun tuneNextStation() {
         radioManager.tuneNextStation()
+    }
+
+    fun tuneToSavedStation(station: String, index: Int) {
+        radioManager.tuneToStation(station, index)
+    }
+
+    fun saveCurrentStationToPreset(index: Int) {
+        val current = radioStation.value
+        if (!current.isNullOrBlank()) {
+            radioManager.savePreset(index, current)
+        }
     }
 
     override fun onCleared() {

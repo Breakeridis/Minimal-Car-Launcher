@@ -69,36 +69,29 @@ fun LeftBottomDock(
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .height(60.dp)
-            .clip(RoundedCornerShape(18.dp))
+            .height(74.dp)
+            .clip(RoundedCornerShape(20.dp))
             .background(dockGradient)
-            .border(1.dp, CarBorder.copy(alpha = 0.55f), RoundedCornerShape(18.dp))
+            .border(1.dp, CarBorder.copy(alpha = 0.55f), RoundedCornerShape(20.dp))
             .padding(horizontal = 8.dp, vertical = 6.dp),
         horizontalArrangement = Arrangement.Start,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        // App Drawer Toggle Button
-        Row(
+        // App Drawer Toggle Button (Icon Only - No Text)
+        Box(
             modifier = Modifier
-                .clip(RoundedCornerShape(12.dp))
+                .size(54.dp)
+                .clip(RoundedCornerShape(14.dp))
                 .background(CarSurfaceVariant.copy(alpha = 0.85f))
-                .border(1.dp, CarBorder.copy(alpha = 0.45f), RoundedCornerShape(12.dp))
-                .clickable { onOpenAppDrawer() }
-                .padding(horizontal = 12.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically
+                .border(1.dp, CarBorder.copy(alpha = 0.45f), RoundedCornerShape(14.dp))
+                .clickable { onOpenAppDrawer() },
+            contentAlignment = Alignment.Center
         ) {
             Icon(
                 imageVector = Icons.Default.Apps,
                 contentDescription = "All Apps",
                 tint = AccentCyan,
-                modifier = Modifier.size(20.dp)
-            )
-            Spacer(modifier = Modifier.width(6.dp))
-            Text(
-                text = "Apps",
-                fontSize = 13.sp,
-                fontWeight = FontWeight.SemiBold,
-                color = TextPrimary
+                modifier = Modifier.size(28.dp)
             )
         }
 
@@ -116,7 +109,7 @@ fun LeftBottomDock(
                 val imageBitmap = BitmapHelper.safeDrawableToImageBitmap(app.icon, 72, 72)
                 Box(
                     modifier = Modifier
-                        .size(42.dp)
+                        .size(52.dp)
                         .clip(CircleShape)
                         .background(CarSurfaceVariant.copy(alpha = 0.8f))
                         .border(1.dp, CarBorder.copy(alpha = 0.45f), CircleShape)
@@ -124,19 +117,19 @@ fun LeftBottomDock(
                             onClick = { onLaunchApp(app) },
                             onLongClick = { onLongClickApp(app) }
                         )
-                        .padding(5.dp),
+                        .padding(6.dp),
                     contentAlignment = Alignment.Center
                 ) {
                     if (imageBitmap != null) {
                         Image(
                             bitmap = imageBitmap,
                             contentDescription = app.label,
-                            modifier = Modifier.size(32.dp)
+                            modifier = Modifier.size(38.dp)
                         )
                     } else {
                         Text(
                             text = app.label.take(1).uppercase(),
-                            fontSize = 14.sp,
+                            fontSize = 16.sp,
                             fontWeight = FontWeight.Bold,
                             color = AccentCyan
                         )
@@ -148,7 +141,7 @@ fun LeftBottomDock(
             if (pinnedApps.size < com.minimal.carlauncher.data.AppRepository.MAX_DOCK_APPS) {
                 Box(
                     modifier = Modifier
-                        .size(42.dp)
+                        .size(52.dp)
                         .clip(CircleShape)
                         .background(CarSurfaceVariant.copy(alpha = 0.8f))
                         .border(1.dp, AccentCyan.copy(alpha = 0.45f), CircleShape)
@@ -159,7 +152,7 @@ fun LeftBottomDock(
                         imageVector = Icons.Default.Add,
                         contentDescription = "Add App to Bar",
                         tint = AccentCyan,
-                        modifier = Modifier.size(20.dp)
+                        modifier = Modifier.size(24.dp)
                     )
                 }
             }
@@ -189,10 +182,10 @@ fun RightBottomDock(
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .height(60.dp)
-            .clip(RoundedCornerShape(18.dp))
+            .height(74.dp)
+            .clip(RoundedCornerShape(20.dp))
             .background(dockGradient)
-            .border(1.dp, CarBorder.copy(alpha = 0.55f), RoundedCornerShape(18.dp))
+            .border(1.dp, CarBorder.copy(alpha = 0.55f), RoundedCornerShape(20.dp))
             .padding(horizontal = 10.dp, vertical = 6.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
@@ -201,15 +194,15 @@ fun RightBottomDock(
         Row(
             modifier = Modifier
                 .weight(1f)
-                .clip(RoundedCornerShape(12.dp))
+                .clip(RoundedCornerShape(14.dp))
                 .background(CarSurfaceVariant.copy(alpha = 0.85f))
                 .border(
                     1.dp,
                     if (isUpdateAvailable) AccentCyan.copy(alpha = 0.7f) else CarBorder.copy(alpha = 0.45f),
-                    RoundedCornerShape(12.dp)
+                    RoundedCornerShape(14.dp)
                 )
                 .clickable { onOpenAbout() }
-                .padding(horizontal = 10.dp, vertical = 8.dp),
+                .padding(horizontal = 10.dp, vertical = 12.dp),
             horizontalArrangement = Arrangement.Center,
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -218,7 +211,7 @@ fun RightBottomDock(
                     imageVector = Icons.Default.Info,
                     contentDescription = "About & Updates",
                     tint = AccentCyan,
-                    modifier = Modifier.size(19.dp)
+                    modifier = Modifier.size(22.dp)
                 )
                 if (isUpdateAvailable) {
                     Box(
@@ -234,7 +227,7 @@ fun RightBottomDock(
             Spacer(modifier = Modifier.width(6.dp))
             Text(
                 text = if (isUpdateAvailable) "Update" else "About",
-                fontSize = 13.sp,
+                fontSize = 14.sp,
                 fontWeight = FontWeight.SemiBold,
                 color = if (isUpdateAvailable) AccentCyan else TextPrimary,
                 maxLines = 1
@@ -247,11 +240,11 @@ fun RightBottomDock(
         Row(
             modifier = Modifier
                 .weight(1f)
-                .clip(RoundedCornerShape(12.dp))
+                .clip(RoundedCornerShape(14.dp))
                 .background(CarSurfaceVariant.copy(alpha = 0.85f))
-                .border(1.dp, CarBorder.copy(alpha = 0.45f), RoundedCornerShape(12.dp))
+                .border(1.dp, CarBorder.copy(alpha = 0.45f), RoundedCornerShape(14.dp))
                 .clickable { onOpenSettings() }
-                .padding(horizontal = 10.dp, vertical = 8.dp),
+                .padding(horizontal = 10.dp, vertical = 12.dp),
             horizontalArrangement = Arrangement.Center,
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -259,12 +252,12 @@ fun RightBottomDock(
                 imageVector = Icons.Default.Settings,
                 contentDescription = "System Settings",
                 tint = TextSecondary,
-                modifier = Modifier.size(19.dp)
+                modifier = Modifier.size(22.dp)
             )
             Spacer(modifier = Modifier.width(6.dp))
             Text(
                 text = "Settings",
-                fontSize = 13.sp,
+                fontSize = 14.sp,
                 fontWeight = FontWeight.SemiBold,
                 color = TextSecondary,
                 maxLines = 1

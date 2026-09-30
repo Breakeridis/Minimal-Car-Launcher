@@ -59,6 +59,7 @@ fun DashboardScreen(
     val dvrApp by viewModel.dvrApp.collectAsState()
     val radioStation by viewModel.radioStation.collectAsState()
     val isRadioActive by viewModel.isRadioActive.collectAsState()
+    val savedRadioStations by viewModel.savedRadioStations.collectAsState()
     val isDarkMode by viewModel.isDarkMode.collectAsState()
 
     // Dialog States
@@ -93,7 +94,7 @@ fun DashboardScreen(
             horizontalArrangement = Arrangement.spacedBy(14.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Left Column: Telemetry (Clock, Speedometer) + Left Bottom Dock (Apps, Pinned, +)
+            // Left Column: Telemetry (Clock, Radio) + Left Bottom Dock (Apps, Pinned, +)
             Column(
                 modifier = Modifier
                     .weight(1f)
@@ -106,18 +107,21 @@ fun DashboardScreen(
                     date = currentDate,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .weight(1f)
+                        .weight(0.82f)
                 )
 
                 RadioStationWidget(
                     radioStation = radioStation,
                     isRadioActive = isRadioActive,
+                    savedStations = savedRadioStations,
                     onTunePrevious = { viewModel.tunePreviousStation() },
                     onTuneNext = { viewModel.tuneNextStation() },
+                    onSelectSavedStation = { station, index -> viewModel.tuneToSavedStation(station, index) },
+                    onSaveCurrentStation = { index -> viewModel.saveCurrentStationToPreset(index) },
                     onLaunchRadio = { viewModel.launchMusic() },
                     modifier = Modifier
                         .fillMaxWidth()
-                        .weight(1.3f)
+                        .weight(1.38f)
                 )
 
                 LeftBottomDock(

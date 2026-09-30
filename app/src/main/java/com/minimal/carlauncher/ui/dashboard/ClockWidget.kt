@@ -47,7 +47,7 @@ fun ClockWidget(
             .clip(RoundedCornerShape(20.dp))
             .background(cardGradient)
             .border(1.dp, CarBorder.copy(alpha = 0.5f), RoundedCornerShape(20.dp))
-            .padding(horizontal = 20.dp, vertical = 14.dp),
+            .padding(horizontal = 18.dp, vertical = 6.dp),
         verticalArrangement = Arrangement.Center
     ) {
         Row(
@@ -68,16 +68,16 @@ fun ClockWidget(
                 fontSize = 24.sp,
                 fontWeight = FontWeight.Medium,
                 color = AccentCyan,
-                modifier = Modifier.padding(bottom = 12.dp)
+                modifier = Modifier.padding(bottom = 6.dp)
             )
         }
 
-        Spacer(modifier = Modifier.height(4.dp))
+        Spacer(modifier = Modifier.height(2.dp))
 
         Text(
             text = if (date.isNotBlank()) date else "Loading date…",
-            fontSize = 18.sp,
-            fontWeight = FontWeight.Normal,
+            fontSize = 16.sp,
+            fontWeight = FontWeight.Medium,
             color = TextSecondary
         )
     }

@@ -1,8 +1,10 @@
 package com.minimal.carlauncher.ui.dashboard
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -40,14 +42,19 @@ import com.minimal.carlauncher.ui.theme.TextSecondary
 
 /**
  * Dedicated hero Radio Station Controller card placed on the driver's instrument cluster.
- * Displays real-time radio frequency and RDS station name, with tactile Prev/Next station seek buttons.
+ * Displays real-time radio frequency and RDS station name, quick-access collected presets,
+ * and tactile Prev/Next station seek buttons.
  */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun RadioStationWidget(
     radioStation: String?,
     isRadioActive: Boolean,
+    savedStations: List<String> = emptyList(),
     onTunePrevious: () -> Unit,
     onTuneNext: () -> Unit,
+    onSelectSavedStation: (String, Int) -> Unit = { _, _ -> },
+    onSaveCurrentStation: (Int) -> Unit = {},
     onLaunchRadio: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -196,6 +203,53 @@ fun RadioStationWidget(
                         fontWeight = FontWeight.Medium,
                         color = TextSecondary
                     )
+                }
+            }
+
+            // Quick-Access Saved / Collected Stations Row (Top 3)
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 2.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                val displayStations = if (savedStations.size >= 3) {
+                    savedStations.take(3)
+                } else {
+                    val list = savedStations.toMutableList()
+                    while (list.size < 3) list.add("P${list.size + 1}")
+                    list
+                }
+
+                displayStations.forEachIndexed { index, station ->
+                    val cleanStation = station.replace(" FM", "").replace(" AM", "").trim()
+                    val isCurrent = hasStation && freqDisplay.contains(cleanStation)
+                    val chipBorder = if (isCurrent) AccentAmber else CarBorder.copy(alpha = 0.55f)
+                    val chipBg = if (isCurrent) AccentAmber.copy(alpha = 0.22f) else CarSurfaceVariant.copy(alpha = 0.85f)
+                    val chipTextColor = if (isCurrent) AccentAmber else TextPrimary
+
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(34.dp)
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(chipBg)
+                            .border(1.2.dp, chipBorder, RoundedCornerShape(10.dp))
+                            .combinedClickable(
+                                onClick = { onSelectSavedStation(station, index) },
+                                onLongClick = { onSaveCurrentStation(index) }
+                            ),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = station,
+                            fontSize = 13.sp,
+                            fontWeight = if (isCurrent) FontWeight.Black else FontWeight.SemiBold,
+                            color = chipTextColor,
+                            maxLines = 1
+                        )
+                    }
                 }
             }
 

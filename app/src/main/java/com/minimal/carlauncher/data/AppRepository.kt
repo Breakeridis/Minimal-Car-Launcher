@@ -461,4 +461,31 @@ class AppRepository(private val context: Context) {
             false
         }
     }
+
+    fun getSavedRadioStations(): List<String> {
+        val raw = prefs.getString("key_saved_radio_stations_v1", null)
+        if (!raw.isNullOrBlank()) {
+            try {
+                val array = JSONArray(raw)
+                val list = mutableListOf<String>()
+                for (i in 0 until array.length()) {
+                    list.add(array.getString(i))
+                }
+                if (list.isNotEmpty()) return list.take(3)
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+        return listOf("89.2", "98.5", "103.7")
+    }
+
+    fun setSavedRadioStation(index: Int, station: String) {
+        val current = getSavedRadioStations().toMutableList()
+        while (current.size < 3) current.add("--.-")
+        if (index in 0 until 3) {
+            current[index] = station
+            val array = JSONArray(current)
+            prefs.edit().putString("key_saved_radio_stations_v1", array.toString()).apply()
+        }
+    }
 }

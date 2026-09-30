@@ -1049,37 +1049,38 @@ fun CircularMapPortal(
             }
         }
 
-        // Floating Speed HUD Popup (Top Left corner of Minimap)
+        // Floating Speed HUD Popup (Top Left corner of Minimap) - DOUBLED SIZE
         Box(
             modifier = Modifier
                 .align(Alignment.TopStart)
-                .padding(start = 10.dp, top = 10.dp)
-                .clip(RoundedCornerShape(14.dp))
+                .padding(start = 8.dp, top = 8.dp)
+                .clip(RoundedCornerShape(18.dp))
                 .background(CarSurface.copy(alpha = 0.94f))
-                .border(1.2.dp, CarBorder.copy(alpha = 0.8f), RoundedCornerShape(14.dp))
+                .border(1.5.dp, CarBorder.copy(alpha = 0.85f), RoundedCornerShape(18.dp))
                 .clickable { onToggleSpeedUnit() }
-                .padding(horizontal = 10.dp, vertical = 6.dp)
+                .padding(horizontal = 16.dp, vertical = 8.dp)
         ) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 Box(
                     modifier = Modifier
-                        .size(7.dp)
+                        .size(12.dp)
                         .clip(CircleShape)
                         .background(if (isGpsActive) AccentGreen else AccentAmber)
                 )
                 Text(
                     text = "$speed",
-                    fontSize = 20.sp,
+                    fontSize = 40.sp,
                     fontWeight = FontWeight.Black,
                     color = TextPrimary,
-                    letterSpacing = (-0.5).sp
+                    letterSpacing = (-1).sp,
+                    lineHeight = 40.sp
                 )
                 Text(
                     text = speedUnit.name.lowercase(),
-                    fontSize = 11.sp,
+                    fontSize = 15.sp,
                     fontWeight = FontWeight.Bold,
                     color = AccentCyan
                 )
