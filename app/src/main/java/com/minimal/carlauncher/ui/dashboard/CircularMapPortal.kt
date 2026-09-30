@@ -828,6 +828,12 @@ fun CircularMapPortal(
         }
 
         // 2. Rotating Outer Compass Rose Bezel (Course-Up dial framing the circular map)
+        val bezelOuterBorderColor = CarBorder.copy(alpha = 0.7f)
+        val bezelInnerCyanColor = AccentCyan.copy(alpha = if (isMapDarkMode) 0.35f else 0.45f)
+        val bezelNorthCyanColor = AccentCyan
+        val bezelMinorTickColor = CarBorder.copy(alpha = 0.6f)
+        val bezelPointerColor = AccentCyan
+
         Canvas(modifier = Modifier.fillMaxSize()) {
             val center = Offset(size.width / 2f, size.height / 2f)
             val radius = (size.width / 2f) - 6.dp.toPx()
@@ -835,7 +841,7 @@ fun CircularMapPortal(
             if (radius > 40.dp.toPx()) {
                 // Outer bezel stroke
                 drawCircle(
-                    color = CarBorder.copy(alpha = 0.7f),
+                    color = bezelOuterBorderColor,
                     radius = radius,
                     center = center,
                     style = Stroke(width = 1.5.dp.toPx())
@@ -843,7 +849,7 @@ fun CircularMapPortal(
 
                 // Inner bezel stroke (subtle cyan halo bordering the circular map)
                 drawCircle(
-                    color = AccentCyan.copy(alpha = 0.35f),
+                    color = bezelInnerCyanColor,
                     radius = radius - 24.dp.toPx(),
                     center = center,
                     style = Stroke(width = 1.2.dp.toPx())
@@ -860,7 +866,7 @@ fun CircularMapPortal(
                                 0 -> {
                                     // North (0°) - Vibrant Cyan & Extra Bold Large Text
                                     drawLine(
-                                        color = AccentCyan,
+                                        color = bezelNorthCyanColor,
                                         start = Offset(center.x, center.y - radius),
                                         end = Offset(center.x, center.y - radius + 12.dp.toPx()),
                                         strokeWidth = 3.5.dp.toPx(),
@@ -954,7 +960,7 @@ fun CircularMapPortal(
                                 }
                                 else -> {
                                     drawLine(
-                                        color = CarBorder.copy(alpha = 0.6f),
+                                        color = bezelMinorTickColor,
                                         start = Offset(center.x, center.y - radius),
                                         end = Offset(center.x, center.y - radius + 5.dp.toPx()),
                                         strokeWidth = 1.2.dp.toPx(),
@@ -973,7 +979,7 @@ fun CircularMapPortal(
                     lineTo(center.x + 6.dp.toPx(), center.y - radius - 7.dp.toPx())
                     close()
                 }
-                drawPath(pointerPath, color = AccentCyan)
+                drawPath(pointerPath, color = bezelPointerColor)
             }
         }
 

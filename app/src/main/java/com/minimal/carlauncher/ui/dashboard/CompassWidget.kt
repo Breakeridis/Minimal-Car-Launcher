@@ -108,6 +108,14 @@ fun CompassWidget(
         contentAlignment = Alignment.Center
     ) {
         // Rotating Circular Compass Canvas
+        val ringOuterColor = CarSurfaceVariant.copy(alpha = 0.6f)
+        val ringInnerColor = CarSurfaceVariant.copy(alpha = 0.25f)
+        val northColor = AccentCyan
+        val cardinalColor = TextSecondary
+        val semiCardinalColor = TextMuted
+        val minorTickColor = CarBorder.copy(alpha = 0.5f)
+        val pointerColor = AccentCyan
+
         Canvas(modifier = Modifier.fillMaxSize()) {
             val center = Offset(size.width / 2f, size.height / 2f)
             val radius = (minOf(size.width, size.height) / 2f) - 12.dp.toPx()
@@ -115,13 +123,13 @@ fun CompassWidget(
             if (radius > 20.dp.toPx()) {
                 // Subtle outer and inner compass boundary rings
                 drawCircle(
-                    color = CarSurfaceVariant.copy(alpha = 0.6f),
+                    color = ringOuterColor,
                     radius = radius,
                     center = center,
                     style = Stroke(width = 1.5.dp.toPx())
                 )
                 drawCircle(
-                    color = CarSurfaceVariant.copy(alpha = 0.25f),
+                    color = ringInnerColor,
                     radius = radius - 14.dp.toPx(),
                     center = center,
                     style = Stroke(width = 1.dp.toPx())
@@ -135,7 +143,7 @@ fun CompassWidget(
                                 0 -> {
                                     // North (0°): Cyan bold tick + "N"
                                     drawLine(
-                                        color = AccentCyan,
+                                        color = northColor,
                                         start = Offset(center.x, center.y - radius),
                                         end = Offset(center.x, center.y - radius + 12.dp.toPx()),
                                         strokeWidth = 3.dp.toPx(),
@@ -153,7 +161,7 @@ fun CompassWidget(
                                 90 -> {
                                     // East (90°)
                                     drawLine(
-                                        color = TextSecondary,
+                                        color = cardinalColor,
                                         start = Offset(center.x, center.y - radius),
                                         end = Offset(center.x, center.y - radius + 10.dp.toPx()),
                                         strokeWidth = 2.dp.toPx(),
@@ -171,7 +179,7 @@ fun CompassWidget(
                                 180 -> {
                                     // South (180°)
                                     drawLine(
-                                        color = TextSecondary,
+                                        color = cardinalColor,
                                         start = Offset(center.x, center.y - radius),
                                         end = Offset(center.x, center.y - radius + 10.dp.toPx()),
                                         strokeWidth = 2.dp.toPx(),
@@ -189,7 +197,7 @@ fun CompassWidget(
                                 270 -> {
                                     // West (270°)
                                     drawLine(
-                                        color = TextSecondary,
+                                        color = cardinalColor,
                                         start = Offset(center.x, center.y - radius),
                                         end = Offset(center.x, center.y - radius + 10.dp.toPx()),
                                         strokeWidth = 2.dp.toPx(),
@@ -213,7 +221,7 @@ fun CompassWidget(
                                         else -> "NW"
                                     }
                                     drawLine(
-                                        color = TextMuted,
+                                        color = semiCardinalColor,
                                         start = Offset(center.x, center.y - radius),
                                         end = Offset(center.x, center.y - radius + 8.dp.toPx()),
                                         strokeWidth = 1.5.dp.toPx(),
@@ -231,7 +239,7 @@ fun CompassWidget(
                                 else -> {
                                     // Intermediate minor ticks every 15°
                                     drawLine(
-                                        color = CarBorder.copy(alpha = 0.5f),
+                                        color = minorTickColor,
                                         start = Offset(center.x, center.y - radius),
                                         end = Offset(center.x, center.y - radius + 5.dp.toPx()),
                                         strokeWidth = 1.dp.toPx(),
@@ -250,7 +258,7 @@ fun CompassWidget(
                     lineTo(center.x + 5.dp.toPx(), center.y - radius - 7.dp.toPx())
                     close()
                 }
-                drawPath(pointerPath, color = AccentCyan)
+                drawPath(pointerPath, color = pointerColor)
             }
         }
 
