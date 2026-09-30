@@ -27,7 +27,9 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.GpsFixed
+import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material.icons.filled.Navigation
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Icon
@@ -264,6 +266,8 @@ fun CircularMapPortal(
     onStopNavigation: () -> Unit = {},
     onOpenSearch: () -> Unit = {},
     onOpenNavigation: () -> Unit = {},
+    isMapDarkMode: Boolean = false,
+    onToggleMapDarkMode: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -294,6 +298,22 @@ fun CircularMapPortal(
             destinationOverlayRef?.location = null
         }
         mapViewRef?.invalidate()
+    }
+
+    // Dynamically apply/remove dark night color matrix filter on the map tiles
+    LaunchedEffect(isMapDarkMode) {
+        val darkMatrix = ColorMatrix(
+            floatArrayOf(
+                -0.72f, 0f, 0f, 0f, 215f,
+                0f, -0.72f, 0f, 0f, 220f,
+                0f, 0f, -0.66f, 0f, 232f,
+                0f, 0f, 0f, 1f, 0f
+            )
+        )
+        mapViewRef?.overlayManager?.tilesOverlay?.setColorFilter(
+            if (isMapDarkMode) ColorMatrixColorFilter(darkMatrix) else null
+        )
+        mapViewRef?.postInvalidate()
     }
 
     // Initialize osmdroid configuration safely
@@ -447,7 +467,7 @@ fun CircularMapPortal(
                 .fillMaxSize()
                 .padding(30.dp)
                 .clip(CircleShape)
-                .background(CarBg)
+                .background(if (isMapDarkMode) CarBg else Color(0xFFF1F5F9))
         ) {
             AndroidView(
                 factory = { ctx ->
@@ -462,17 +482,21 @@ fun CircularMapPortal(
                         val initialPoint = GeoPoint(initialLat, initialLon)
                         controller.setCenter(initialPoint)
 
-                        // Elegant Automotive Dark Night Color Matrix filter
+                        // Optional Automotive Dark Night Color Matrix filter
                         // Inverts luminance while preserving a deep cockpit slate-navy undertone
-                        val darkMatrix = ColorMatrix(
-                            floatArrayOf(
-                                -0.72f, 0f, 0f, 0f, 215f,
-                                0f, -0.72f, 0f, 0f, 220f,
-                                0f, 0f, -0.66f, 0f, 232f,
-                                0f, 0f, 0f, 1f, 0f
+                        if (isMapDarkMode) {
+                            val darkMatrix = ColorMatrix(
+                                floatArrayOf(
+                                    -0.72f, 0f, 0f, 0f, 215f,
+                                    0f, -0.72f, 0f, 0f, 220f,
+                                    0f, 0f, -0.66f, 0f, 232f,
+                                    0f, 0f, 0f, 1f, 0f
+                                )
                             )
-                        )
-                        overlayManager.tilesOverlay.setColorFilter(ColorMatrixColorFilter(darkMatrix))
+                            overlayManager.tilesOverlay.setColorFilter(ColorMatrixColorFilter(darkMatrix))
+                        } else {
+                            overlayManager.tilesOverlay.setColorFilter(null)
+                        }
 
                         // Add Route Polylines (Casing + Core)
                         val routeCasing = Polyline(this).apply {
@@ -598,6 +622,28 @@ fun CircularMapPortal(
                         imageVector = Icons.Default.GpsFixed,
                         contentDescription = "Recenter",
                         tint = if (isUserPanning) AccentAmber else if (isGpsActive) AccentGreen else AccentAmber,
+                        modifier = Modifier.size(19.dp)
+                    )
+                }
+
+                // Map Day/Night Light Mode Toggle
+                Box(
+                    modifier = Modifier
+                        .size(38.dp)
+                        .clip(CircleShape)
+                        .background(CarSurface.copy(alpha = 0.88f))
+                        .border(
+                            1.dp,
+                            if (!isMapDarkMode) AccentAmber.copy(alpha = 0.7f) else CarBorder.copy(alpha = 0.6f),
+                            CircleShape
+                        )
+                        .clickable { onToggleMapDarkMode() },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = if (isMapDarkMode) Icons.Default.LightMode else Icons.Default.DarkMode,
+                        contentDescription = if (isMapDarkMode) "Switch to Light Map" else "Switch to Dark Map",
+                        tint = if (isMapDarkMode) TextSecondary else AccentAmber,
                         modifier = Modifier.size(19.dp)
                     )
                 }

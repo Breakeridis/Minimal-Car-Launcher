@@ -58,6 +58,7 @@ fun DashboardScreen(
     val musicApp by viewModel.musicApp.collectAsState()
     val dvrApp by viewModel.dvrApp.collectAsState()
     val radioStation by viewModel.radioStation.collectAsState()
+    val isMapDarkMode by viewModel.isMapDarkMode.collectAsState()
 
     // Dialog States
     val selectedDockApp by viewModel.selectedDockAppForAction.collectAsState()
@@ -143,6 +144,8 @@ fun DashboardScreen(
                 onStopNavigation = { viewModel.stopNavigation() },
                 onOpenSearch = { viewModel.openAddressSearch() },
                 onOpenNavigation = { viewModel.launchNavigation() },
+                isMapDarkMode = isMapDarkMode,
+                onToggleMapDarkMode = { viewModel.toggleMapDarkMode() },
                 modifier = Modifier
                     .fillMaxHeight()
                     .aspectRatio(1f)

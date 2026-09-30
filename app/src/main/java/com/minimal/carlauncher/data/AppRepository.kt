@@ -26,6 +26,7 @@ class AppRepository(private val context: Context) {
         private const val KEY_CUSTOM_MUSIC_PACKAGE = "key_custom_music_package"
         private const val KEY_CUSTOM_DVR_PACKAGE = "key_custom_dvr_package"
         private const val KEY_DVR_AUTOSTART_ENABLED = "key_dvr_autostart_enabled"
+        private const val KEY_MAP_DARK_MODE = "key_map_dark_mode"
         const val MAX_DOCK_APPS = 6
     }
 
@@ -266,6 +267,12 @@ class AppRepository(private val context: Context) {
 
     fun setDvrAutoStartEnabled(enabled: Boolean) {
         prefs.edit().putBoolean(KEY_DVR_AUTOSTART_ENABLED, enabled).apply()
+    }
+
+    fun isMapDarkMode(): Boolean = prefs.getBoolean(KEY_MAP_DARK_MODE, false)
+
+    fun setMapDarkMode(isDark: Boolean) {
+        prefs.edit().putBoolean(KEY_MAP_DARK_MODE, isDark).apply()
     }
 
     fun resolveDvrApp(allApps: List<AppInfo>): AppInfo? {
