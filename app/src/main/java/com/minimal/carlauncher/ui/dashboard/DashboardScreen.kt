@@ -58,6 +58,7 @@ fun DashboardScreen(
     val musicApp by viewModel.musicApp.collectAsState()
     val dvrApp by viewModel.dvrApp.collectAsState()
     val radioStation by viewModel.radioStation.collectAsState()
+    val isRadioActive by viewModel.isRadioActive.collectAsState()
     val isDarkMode by viewModel.isDarkMode.collectAsState()
 
     // Dialog States
@@ -108,11 +109,12 @@ fun DashboardScreen(
                         .weight(1f)
                 )
 
-                SpeedometerWidget(
-                    speed = currentSpeed,
-                    unit = speedUnit,
-                    isGpsActive = isGpsActive,
-                    onToggleUnit = { viewModel.toggleSpeedUnit() },
+                RadioStationWidget(
+                    radioStation = radioStation,
+                    isRadioActive = isRadioActive,
+                    onTunePrevious = { viewModel.tunePreviousStation() },
+                    onTuneNext = { viewModel.tuneNextStation() },
+                    onLaunchRadio = { viewModel.launchMusic() },
                     modifier = Modifier
                         .fillMaxWidth()
                         .weight(1.3f)
@@ -135,6 +137,9 @@ fun DashboardScreen(
                 cardinalDirection = cardinalDirection,
                 speedKmH = speedKmH,
                 isGpsActive = isGpsActive,
+                speed = currentSpeed,
+                speedUnit = speedUnit,
+                onToggleSpeedUnit = { viewModel.toggleSpeedUnit() },
                 activeRoute = activeRoute,
                 isNavigating = isNavigating,
                 isCalculatingRoute = isCalculatingRoute,
@@ -162,7 +167,6 @@ fun DashboardScreen(
                     zlinkLabel = zlinkApp?.label ?: "ZLink",
                     navApp = navigationApp,
                     musicApp = musicApp,
-                    radioStation = radioStation,
                     onLaunchDvr = { viewModel.launchDvr() },
                     onLongClickDvr = { viewModel.openDvrPicker() },
                     onLaunchZLink = { viewModel.launchZLink() },

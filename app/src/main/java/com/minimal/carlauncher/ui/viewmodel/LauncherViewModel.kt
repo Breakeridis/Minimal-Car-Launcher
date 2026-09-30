@@ -34,6 +34,7 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
     private val updateManager = UpdateManager(application)
 
     val radioStation: StateFlow<String?> = radioManager.radioStation
+    val isRadioActive: StateFlow<Boolean> = radioManager.isRadioActive
 
     // Applications State
     private val _allApps = MutableStateFlow<List<AppInfo>>(emptyList())
@@ -525,6 +526,14 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
     fun refreshRadio() {
         radioManager.readCurrentSettingsFrequency()
         radioManager.requestRadioInfoPing()
+    }
+
+    fun tunePreviousStation() {
+        radioManager.tunePreviousStation()
+    }
+
+    fun tuneNextStation() {
+        radioManager.tuneNextStation()
     }
 
     override fun onCleared() {

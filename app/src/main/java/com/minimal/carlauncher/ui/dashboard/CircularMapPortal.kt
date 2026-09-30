@@ -63,6 +63,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.minimal.carlauncher.service.NavigationRoute
+import com.minimal.carlauncher.service.SpeedUnit
 import com.minimal.carlauncher.ui.theme.AccentAmber
 import com.minimal.carlauncher.ui.theme.AccentCyan
 import com.minimal.carlauncher.ui.theme.AccentGreen
@@ -136,26 +137,26 @@ private class VehicleMarkerOverlay(private val density: Float) : Overlay() {
         canvas.translate(screenPoint.x.toFloat(), screenPoint.y.toFloat())
         canvas.rotate(-mapView.mapOrientation)
 
-        val radius = 30f * density
-        borderPaint.strokeWidth = 3.5f * density
+        val radius = 20f * density
+        borderPaint.strokeWidth = 2.5f * density
         canvas.drawCircle(0f, 0f, radius, badgePaint)
         canvas.drawCircle(0f, 0f, radius, borderPaint)
 
         // Automotive Chevron Arrow pointing straight UP (12 o'clock)
         arrowPath.reset()
-        arrowPath.moveTo(0f, -19f * density)
-        arrowPath.lineTo(14f * density, 12f * density)
-        arrowPath.lineTo(0f, 6f * density)
-        arrowPath.lineTo(-14f * density, 12f * density)
+        arrowPath.moveTo(0f, -12f * density)
+        arrowPath.lineTo(9f * density, 8f * density)
+        arrowPath.lineTo(0f, 4f * density)
+        arrowPath.lineTo(-9f * density, 8f * density)
         arrowPath.close()
         canvas.drawPath(arrowPath, arrowPaint)
 
         // Inner white core for sharp visual definition
         corePath.reset()
-        corePath.moveTo(0f, -13f * density)
-        corePath.lineTo(8f * density, 8f * density)
-        corePath.lineTo(0f, 4f * density)
-        corePath.lineTo(-8f * density, 8f * density)
+        corePath.moveTo(0f, -8f * density)
+        corePath.lineTo(5f * density, 5f * density)
+        corePath.lineTo(0f, 2.5f * density)
+        corePath.lineTo(-5f * density, 5f * density)
         corePath.close()
         canvas.drawPath(corePath, arrowCorePaint)
 
@@ -260,6 +261,9 @@ fun CircularMapPortal(
     cardinalDirection: String,
     speedKmH: Float = 0f,
     isGpsActive: Boolean,
+    speed: Int = 0,
+    speedUnit: SpeedUnit = SpeedUnit.KMH,
+    onToggleSpeedUnit: () -> Unit = {},
     activeRoute: NavigationRoute? = null,
     isNavigating: Boolean = false,
     isCalculatingRoute: Boolean = false,
@@ -455,12 +459,16 @@ fun CircularMapPortal(
     }
 
     Box(
-        modifier = modifier
-            .aspectRatio(1f)
-            .clip(CircleShape)
-            .background(CarSurface),
+        modifier = modifier.aspectRatio(1f),
         contentAlignment = Alignment.Center
     ) {
+        // Circular Portal Background Base
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .clip(CircleShape)
+                .background(CarSurface)
+        )
         // 1. Live Circular OpenStreetMap (Inset with 30dp padding for clear compass bezel visibility)
         Box(
             modifier = Modifier
@@ -1037,6 +1045,43 @@ fun CircularMapPortal(
                     fontWeight = FontWeight.Bold,
                     color = AccentCyan,
                     letterSpacing = 0.5.sp
+                )
+            }
+        }
+
+        // Floating Speed HUD Popup (Top Left corner of Minimap)
+        Box(
+            modifier = Modifier
+                .align(Alignment.TopStart)
+                .padding(start = 10.dp, top = 10.dp)
+                .clip(RoundedCornerShape(14.dp))
+                .background(CarSurface.copy(alpha = 0.94f))
+                .border(1.2.dp, CarBorder.copy(alpha = 0.8f), RoundedCornerShape(14.dp))
+                .clickable { onToggleSpeedUnit() }
+                .padding(horizontal = 10.dp, vertical = 6.dp)
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(7.dp)
+                        .clip(CircleShape)
+                        .background(if (isGpsActive) AccentGreen else AccentAmber)
+                )
+                Text(
+                    text = "$speed",
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.Black,
+                    color = TextPrimary,
+                    letterSpacing = (-0.5).sp
+                )
+                Text(
+                    text = speedUnit.name.lowercase(),
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = AccentCyan
                 )
             }
         }

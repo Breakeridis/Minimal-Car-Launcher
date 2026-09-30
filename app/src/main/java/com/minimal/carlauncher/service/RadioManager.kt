@@ -415,18 +415,11 @@ class RadioManager(private val context: Context) {
                             // 2. Discard empty / invalid values
                             if (value.isBlank() || value == "0" || value == "-1" || value.equals("null", ignoreCase = true)) continue
 
-                            // 3. Scan candidate frequency settings
-                            val isFreqCandidate = lowerName.startsWith("qf_") ||
-                                lowerName.startsWith("nwd_") ||
-                                lowerName.startsWith("allwinner_") ||
-                                lowerName.startsWith("softwinner_") ||
-                                lowerName.startsWith("mcu_") ||
-                                lowerName.contains("radio_freq") ||
-                                lowerName.contains("cur_freq") ||
-                                lowerName.contains("current_freq") ||
+                            // 3. Scan candidate frequency settings (strictly require frequency / channel keywords, NEVER generic prefixes)
+                            val isFreqCandidate = lowerName.contains("freq") ||
+                                lowerName.contains("frequency") ||
                                 lowerName.contains("curfreq") ||
-                                lowerName.contains("fm_freq") ||
-                                (lowerName.contains("radio") && (lowerName.contains("freq") || lowerName.contains("chan") || lowerName.contains("channel")))
+                                (lowerName.contains("radio") && (lowerName.contains("chan") || lowerName.contains("channel") || lowerName.contains("station") || lowerName.contains("play")))
 
                             if (foundFreq == null && isFreqCandidate) {
                                 val formatted = formatFrequency(value, null, null)
@@ -560,6 +553,86 @@ class RadioManager(private val context: Context) {
                 // Ignore
             }
         }
+    }
+
+    /**
+     * Broadcasts tune / seek previous commands across NWD, QF, Allwinner and automotive HAL daemons.
+     */
+    fun tunePreviousStation() {
+        val intents = listOf(
+            Intent("com.nwd.action.ACTION_SEND_RADIO_COMMAND").apply { putExtra("command", "prev"); putExtra("extra_command", "prev") },
+            Intent("com.nwd.action.ACTION_SEND_RADIO_COMMAND").apply { putExtra("command", "tune_down"); putExtra("extra_command", "tune_down") },
+            Intent("com.nwd.action.ACTION_SEND_RADIO_COMMAND").apply { putExtra("command", "seek_down"); putExtra("extra_command", "seek_down") },
+            Intent("com.nwd.radio.prev"),
+            Intent("com.nwd.radio.tune_down"),
+            Intent("com.nwd.radio.seek_down"),
+            Intent("com.nwd.radio.action").apply { putExtra("action", "prev"); putExtra("cmd", "prev") },
+            Intent("com.nwd.link.radio.prev"),
+            Intent("com.qf.radio.action").apply { putExtra("action", "prev"); putExtra("cmd", "prev") },
+            Intent("com.qf.action.RADIO_PREV"),
+            Intent("com.allwinner.radio.prev"),
+            Intent("com.allwinner.radio.ACTION_PREV")
+        )
+        for (intent in intents) {
+            try {
+                context.sendBroadcast(intent)
+            } catch (e: Throwable) {
+                // Ignore
+            }
+        }
+
+        try {
+            val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as? android.media.AudioManager
+            audioManager?.dispatchMediaKeyEvent(android.view.KeyEvent(android.view.KeyEvent.ACTION_DOWN, android.view.KeyEvent.KEYCODE_CHANNEL_DOWN))
+            audioManager?.dispatchMediaKeyEvent(android.view.KeyEvent(android.view.KeyEvent.ACTION_UP, android.view.KeyEvent.KEYCODE_CHANNEL_DOWN))
+        } catch (e: Throwable) {
+            // Ignore
+        }
+
+        mainHandler.postDelayed({
+            requestRadioInfoPing()
+            readCurrentSettingsFrequency()
+        }, 350L)
+    }
+
+    /**
+     * Broadcasts tune / seek next commands across NWD, QF, Allwinner and automotive HAL daemons.
+     */
+    fun tuneNextStation() {
+        val intents = listOf(
+            Intent("com.nwd.action.ACTION_SEND_RADIO_COMMAND").apply { putExtra("command", "next"); putExtra("extra_command", "next") },
+            Intent("com.nwd.action.ACTION_SEND_RADIO_COMMAND").apply { putExtra("command", "tune_up"); putExtra("extra_command", "tune_up") },
+            Intent("com.nwd.action.ACTION_SEND_RADIO_COMMAND").apply { putExtra("command", "seek_up"); putExtra("extra_command", "seek_up") },
+            Intent("com.nwd.radio.next"),
+            Intent("com.nwd.radio.tune_up"),
+            Intent("com.nwd.radio.seek_up"),
+            Intent("com.nwd.radio.action").apply { putExtra("action", "next"); putExtra("cmd", "next") },
+            Intent("com.nwd.link.radio.next"),
+            Intent("com.qf.radio.action").apply { putExtra("action", "next"); putExtra("cmd", "next") },
+            Intent("com.qf.action.RADIO_NEXT"),
+            Intent("com.allwinner.radio.next"),
+            Intent("com.allwinner.radio.ACTION_NEXT")
+        )
+        for (intent in intents) {
+            try {
+                context.sendBroadcast(intent)
+            } catch (e: Throwable) {
+                // Ignore
+            }
+        }
+
+        try {
+            val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as? android.media.AudioManager
+            audioManager?.dispatchMediaKeyEvent(android.view.KeyEvent(android.view.KeyEvent.ACTION_DOWN, android.view.KeyEvent.KEYCODE_CHANNEL_UP))
+            audioManager?.dispatchMediaKeyEvent(android.view.KeyEvent(android.view.KeyEvent.ACTION_UP, android.view.KeyEvent.KEYCODE_CHANNEL_UP))
+        } catch (e: Throwable) {
+            // Ignore
+        }
+
+        mainHandler.postDelayed({
+            requestRadioInfoPing()
+            readCurrentSettingsFrequency()
+        }, 350L)
     }
 
     private fun registerSettingsObservers() {
@@ -883,7 +956,9 @@ class RadioManager(private val context: Context) {
             "airplane", "toggleable", "cell", "wifi", "bluetooth", "nfc", "telephony",
             "network", "mobile", "carrier", "sim", "gps", "device_name", "volume",
             "mute", "gain", "switch", "package", "service", "provider", "version",
-            "data_stall", "mode_radios", "audio_output", "com.android", "com.google"
+            "data_stall", "mode_radios", "audio_output", "com.android", "com.google",
+            "bright", "brightness", "backlight", "screen", "display", "touch", "dsp",
+            "sound", "audio", "sensor", "light", "temp", "battery", "level", "mode"
         )
 
         fun onGlobalBroadcast(intent: Intent) {
@@ -910,9 +985,9 @@ class RadioManager(private val context: Context) {
                         // Try 16-bit LE / BE integers (standard MCU FF01 frequency registers)
                         val le = (rawFreq[0].toInt() and 0xFF) or ((rawFreq[1].toInt() and 0xFF) shl 8)
                         val be = ((rawFreq[0].toInt() and 0xFF) shl 8) or (rawFreq[1].toInt() and 0xFF)
-                        if (le in 6500..11500 || le in 520..1750 || le in 65000..115000) {
+                        if (le in 8700..10850 || le in 520..1750 || le in 87000..108500) {
                             le.toString()
-                        } else if (be in 6500..11500 || be in 520..1750 || be in 65000..115000) {
+                        } else if (be in 8700..10850 || be in 520..1750 || be in 87000..108500) {
                             be.toString()
                         } else {
                             rawFreq.toString()
@@ -940,8 +1015,8 @@ class RadioManager(private val context: Context) {
             val directNum = str.toDoubleOrNull()
             if (directNum != null) {
                 when {
-                    // FM in Hz (50 MHz - 115 MHz): 50,000,000 to 115,000,000 Hz
-                    directNum in 50_000_000.0..115_000_000.0 -> {
+                    // FM in Hz (87 MHz - 108.5 MHz): 87,000,000 to 108,500,000 Hz
+                    directNum in 87_000_000.0..108_500_000.0 -> {
                         val mhz = directNum / 1_000_000.0
                         formattedFreq = String.format(Locale.US, "%.1f FM", mhz)
                     }
@@ -950,8 +1025,8 @@ class RadioManager(private val context: Context) {
                         val khz = (directNum / 1000.0).roundToInt()
                         formattedFreq = "$khz AM"
                     }
-                    // FM in kHz (65,000 - 115,000 kHz, e.g. 98500)
-                    directNum in 65_000.0..115_000.0 -> {
+                    // FM in kHz (87,000 - 108,500 kHz, e.g. 98500)
+                    directNum in 87_000.0..108_500.0 -> {
                         val mhz = directNum / 1000.0
                         formattedFreq = String.format(Locale.US, "%.1f FM", mhz)
                     }
@@ -960,8 +1035,8 @@ class RadioManager(private val context: Context) {
                         val khz = (directNum / 10.0).roundToInt()
                         formattedFreq = "$khz AM"
                     }
-                    // FM in 10 kHz (6,500 - 11,500, e.g. 9850 -> 98.5 FM, standard Chinese car stereos Allwinner/QF/NWD)
-                    directNum in 6500.0..11500.0 -> {
+                    // FM in 10 kHz (8,700 - 10,850, e.g. 9850 -> 98.5 FM, standard Chinese car stereos Allwinner/QF/NWD)
+                    directNum in 8700.0..10850.0 -> {
                         val mhz = directNum / 100.0
                         formattedFreq = String.format(Locale.US, "%.1f FM", mhz)
                     }
@@ -973,8 +1048,12 @@ class RadioManager(private val context: Context) {
                             "${directNum.roundToInt()} AM"
                         }
                     }
-                    // FM in MHz (65.0 - 115.0 MHz, e.g. 98.5)
-                    directNum in 65.0..115.0 -> {
+                    // FM in MHz (Standard European / US / Worldwide Band: 87.0 - 108.5 MHz, e.g. 98.5)
+                    directNum in 87.0..108.5 -> {
+                        formattedFreq = String.format(Locale.US, "%.1f FM", directNum)
+                    }
+                    // Extended FM (e.g. 65.0 - 87.0) ONLY accepted if explicit decimal point or explicit FM band flag, NEVER a raw integer like 77
+                    isExplicitFm && directNum in 65.0..87.0 && (str.contains(".") || rawBand?.contains("OIRT", ignoreCase = true) == true) -> {
                         formattedFreq = String.format(Locale.US, "%.1f FM", directNum)
                     }
                     // LW in kHz (140 - 300 kHz)
@@ -993,19 +1072,19 @@ class RadioManager(private val context: Context) {
                     val extractedNum = match.value.toDoubleOrNull()
                     if (extractedNum != null) {
                         when {
-                            extractedNum in 50_000_000.0..115_000_000.0 -> {
+                            extractedNum in 87_000_000.0..108_500_000.0 -> {
                                 formattedFreq = String.format(Locale.US, "%.1f FM", extractedNum / 1_000_000.0)
                             }
                             extractedNum in 500_000.0..1_750_000.0 -> {
                                 formattedFreq = "${(extractedNum / 1000.0).roundToInt()} AM"
                             }
-                            extractedNum in 65_000.0..115_000.0 -> {
+                            extractedNum in 87_000.0..108_500.0 -> {
                                 formattedFreq = String.format(Locale.US, "%.1f FM", extractedNum / 1000.0)
                             }
                             isExplicitAm && extractedNum in 5200.0..17500.0 -> {
                                 formattedFreq = "${(extractedNum / 10.0).roundToInt()} AM"
                             }
-                            extractedNum in 6500.0..11500.0 -> {
+                            extractedNum in 8700.0..10850.0 -> {
                                 formattedFreq = String.format(Locale.US, "%.1f FM", extractedNum / 100.0)
                             }
                             extractedNum in 520.0..1750.0 -> {
@@ -1015,7 +1094,7 @@ class RadioManager(private val context: Context) {
                                     "${extractedNum.roundToInt()} AM"
                                 }
                             }
-                            extractedNum in 65.0..115.0 -> {
+                            extractedNum in 87.0..108.5 -> {
                                 formattedFreq = String.format(Locale.US, "%.1f FM", extractedNum)
                             }
                         }
