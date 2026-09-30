@@ -9,6 +9,7 @@ import android.database.ContentObserver
 import android.net.Uri
 import android.os.Build
 import android.os.Handler
+import android.os.HandlerThread
 import android.os.Looper
 import android.provider.Settings
 import kotlinx.coroutines.CoroutineScope
@@ -182,7 +183,10 @@ class RadioManager(private val context: Context) {
         "hw.radio.freq"
     )
 
-    private val settingsObserver = object : ContentObserver(mainHandler) {
+    private val bgThread = HandlerThread("RadioSettingsObserver").apply { start() }
+    private val bgHandler = Handler(bgThread.looper)
+
+    private val settingsObserver = object : ContentObserver(bgHandler) {
         override fun onChange(selfChange: Boolean, uri: Uri?) {
             super.onChange(selfChange, uri)
             readCurrentSettingsFrequency()
@@ -205,23 +209,28 @@ class RadioManager(private val context: Context) {
         isMonitoring = true
         activeInstance = WeakReference(this)
 
-        // 1. Initial read from System Settings and Properties
-        readCurrentSettingsFrequency()
+        // 1. Warm up dynamic target components in background (0ms button tap latency)
+        warmUpDynamicTargets()
 
-        // 2. Register ContentObservers for real-time changes
+        // 2. Initial read from System Settings and Properties on background thread
+        CoroutineScope(Dispatchers.IO).launch {
+            readCurrentSettingsFrequency()
+        }
+
+        // 3. Register ContentObservers for real-time changes
         registerSettingsObservers()
 
-        // 3. Register BroadcastReceiver for vendor events
+        // 4. Register BroadcastReceiver for vendor events
         registerBroadcastReceiver()
 
-        // 4. Request initial radio info broadcast from MCU daemon
+        // 5. Request initial radio info broadcast from MCU daemon
         requestRadioInfoPing()
 
-        // 5. Background polling loop every 2.5s for continuous sync
+        // 6. Background polling loop every 3s for continuous sync
         pollingJob?.cancel()
         pollingJob = CoroutineScope(Dispatchers.IO).launch {
             while (isMonitoring) {
-                delay(2500L)
+                delay(3000L)
                 readCurrentSettingsFrequency()
                 requestRadioInfoPing()
             }
@@ -246,6 +255,10 @@ class RadioManager(private val context: Context) {
         } catch (e: Exception) {
             e.printStackTrace()
         }
+
+        try {
+            bgThread.quitSafely()
+        } catch (e: Exception) {}
     }
 
     fun readCurrentSettingsFrequency() {
@@ -584,27 +597,46 @@ class RadioManager(private val context: Context) {
         _savedStations.value = repository.getSavedRadioStations()
     }
 
-    private fun getDynamicRadioTargets(): Pair<List<ComponentName>, List<ComponentName>> {
-        val pm = context.packageManager
-        val receivers = mutableListOf<ComponentName>()
-        val services = mutableListOf<ComponentName>()
-        try {
-            val installed = pm.getInstalledPackages(
-                android.content.pm.PackageManager.GET_RECEIVERS or android.content.pm.PackageManager.GET_SERVICES
-            )
-            for (pkg in installed) {
-                val pName = pkg.packageName.lowercase()
-                if (pName.contains("radio") || pName.contains("nwd") || pName.contains("allwinner") || pName.contains("qf")) {
-                    pkg.receivers?.forEach { r ->
-                        receivers.add(ComponentName(pkg.packageName, r.name))
-                    }
-                    pkg.services?.forEach { s ->
-                        services.add(ComponentName(pkg.packageName, s.name))
+    private val cachedDynamicReceivers = mutableListOf<ComponentName>()
+    private val cachedDynamicServices = mutableListOf<ComponentName>()
+    @Volatile
+    private var hasCachedTargets = false
+
+    private fun warmUpDynamicTargets() {
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                val pm = context.packageManager
+                val installed = pm.getInstalledPackages(
+                    android.content.pm.PackageManager.GET_RECEIVERS or android.content.pm.PackageManager.GET_SERVICES
+                )
+                val recs = mutableListOf<ComponentName>()
+                val svcs = mutableListOf<ComponentName>()
+                for (pkg in installed) {
+                    val pName = pkg.packageName.lowercase()
+                    if (pName.contains("radio") || pName.contains("nwd") || pName.contains("allwinner") || pName.contains("qf")) {
+                        pkg.receivers?.forEach { r -> recs.add(ComponentName(pkg.packageName, r.name)) }
+                        pkg.services?.forEach { s -> svcs.add(ComponentName(pkg.packageName, s.name)) }
                     }
                 }
+                synchronized(cachedDynamicReceivers) {
+                    cachedDynamicReceivers.clear()
+                    cachedDynamicReceivers.addAll(recs)
+                    cachedDynamicServices.clear()
+                    cachedDynamicServices.addAll(svcs)
+                    hasCachedTargets = true
+                }
+            } catch (e: Throwable) {}
+        }
+    }
+
+    private fun getDynamicRadioTargets(): Pair<List<ComponentName>, List<ComponentName>> {
+        synchronized(cachedDynamicReceivers) {
+            if (hasCachedTargets) {
+                return Pair(cachedDynamicReceivers.toList(), cachedDynamicServices.toList())
             }
-        } catch (e: Throwable) {}
-        return Pair(receivers, services)
+        }
+        warmUpDynamicTargets()
+        return Pair(emptyList(), emptyList())
     }
 
     /**
@@ -798,60 +830,61 @@ class RadioManager(private val context: Context) {
             putExtra("keyCode", primaryKeyCode)
         })
 
-        // 6. Execute Dispatch (Global, Package-Targeted, Component-Targeted Broadcasts & Services)
-        for (baseIntent in intentsToSend) {
-            baseIntent.addFlags(Intent.FLAG_RECEIVER_FOREGROUND or Intent.FLAG_INCLUDE_STOPPED_PACKAGES)
+        // 6. Execute Dispatch (Global, Package-Targeted, Component-Targeted Broadcasts & Services on background thread)
+        CoroutineScope(Dispatchers.IO).launch {
+            for (baseIntent in intentsToSend) {
+                baseIntent.addFlags(Intent.FLAG_RECEIVER_FOREGROUND or Intent.FLAG_INCLUDE_STOPPED_PACKAGES)
 
-            // 6a. Implicit Broadcast
-            try {
-                context.sendBroadcast(baseIntent)
-            } catch (e: Throwable) {}
-
-            // 6b. Package-targeted Broadcasts
-            for (pkg in allTargetPackages) {
+                // 6a. Implicit Broadcast
                 try {
-                    context.sendBroadcast(Intent(baseIntent).apply { setPackage(pkg) })
+                    context.sendBroadcast(baseIntent)
                 } catch (e: Throwable) {}
-            }
 
-            // 6c. Explicit Component Broadcasts
-            for (rec in dynamicReceivers) {
-                try {
-                    context.sendBroadcast(Intent(baseIntent).apply { component = rec })
-                } catch (e: Throwable) {}
-            }
+                // 6b. Package-targeted Broadcasts
+                for (pkg in allTargetPackages) {
+                    try {
+                        context.sendBroadcast(Intent(baseIntent).apply { setPackage(pkg) })
+                    } catch (e: Throwable) {}
+                }
 
-            // 6d. Explicit Service Start Commands (Delivers to onStartCommand)
-            for (svc in dynamicServices) {
-                try {
-                    context.startService(Intent(baseIntent).apply { component = svc })
-                } catch (e: Throwable) {}
-            }
-        }
+                // 6c. Explicit Component Broadcasts
+                for (rec in dynamicReceivers) {
+                    try {
+                        context.sendBroadcast(Intent(baseIntent).apply { component = rec })
+                    } catch (e: Throwable) {}
+                }
 
-        // 7. Direct Stepped Frequency Fallback
-        try {
-            val current = _radioStation.value
-            if (!current.isNullOrBlank()) {
-                val match = Regex("""(\d{2,4}(?:\.\d{1,2})?)""").find(current)
-                if (match != null) {
-                    val currDouble = match.value.toDoubleOrNull()
-                    if (currDouble != null && currDouble in 87.0..108.5) {
-                        val delta = if (isNext) 0.1 else -0.1
-                        var target = (Math.round((currDouble + delta) * 10.0) / 10.0)
-                        if (target > 108.0) target = 87.5
-                        if (target < 87.5) target = 108.0
-                        val targetStr = String.format(Locale.US, "%.1f", target)
-                        tuneToStation(targetStr, -1)
-                    }
+                // 6d. Explicit Service Start Commands (Delivers to onStartCommand)
+                for (svc in dynamicServices) {
+                    try {
+                        context.startService(Intent(baseIntent).apply { component = svc })
+                    } catch (e: Throwable) {}
                 }
             }
-        } catch (e: Throwable) {}
 
-        mainHandler.postDelayed({
+            // 7. Direct Stepped Frequency Fallback
+            try {
+                val current = _radioStation.value
+                if (!current.isNullOrBlank()) {
+                    val match = Regex("""(\d{2,4}(?:\.\d{1,2})?)""").find(current)
+                    if (match != null) {
+                        val currDouble = match.value.toDoubleOrNull()
+                        if (currDouble != null && currDouble in 87.0..108.5) {
+                            val delta = if (isNext) 0.1 else -0.1
+                            var target = (Math.round((currDouble + delta) * 10.0) / 10.0)
+                            if (target > 108.0) target = 87.5
+                            if (target < 87.5) target = 108.0
+                            val targetStr = String.format(Locale.US, "%.1f", target)
+                            tuneToStation(targetStr, -1)
+                        }
+                    }
+                }
+            } catch (e: Throwable) {}
+
+            delay(350L)
             requestRadioInfoPing()
             readCurrentSettingsFrequency()
-        }, 350L)
+        }
     }
 
     /**
@@ -944,32 +977,33 @@ class RadioManager(private val context: Context) {
         val (dynamicReceivers, dynamicServices) = getDynamicRadioTargets()
         val allTargetPackages = (radioPackages + dynamicReceivers.map { it.packageName } + dynamicServices.map { it.packageName }).distinct()
 
-        for (intent in intents) {
-            intent.addFlags(Intent.FLAG_RECEIVER_FOREGROUND or Intent.FLAG_INCLUDE_STOPPED_PACKAGES)
-            try {
-                context.sendBroadcast(intent)
-            } catch (e: Throwable) {}
-            for (pkg in allTargetPackages) {
+        CoroutineScope(Dispatchers.IO).launch {
+            for (intent in intents) {
+                intent.addFlags(Intent.FLAG_RECEIVER_FOREGROUND or Intent.FLAG_INCLUDE_STOPPED_PACKAGES)
                 try {
-                    context.sendBroadcast(Intent(intent).apply { setPackage(pkg) })
+                    context.sendBroadcast(intent)
                 } catch (e: Throwable) {}
+                for (pkg in allTargetPackages) {
+                    try {
+                        context.sendBroadcast(Intent(intent).apply { setPackage(pkg) })
+                    } catch (e: Throwable) {}
+                }
+                for (rec in dynamicReceivers) {
+                    try {
+                        context.sendBroadcast(Intent(intent).apply { component = rec })
+                    } catch (e: Throwable) {}
+                }
+                for (svc in dynamicServices) {
+                    try {
+                        context.startService(Intent(intent).apply { component = svc })
+                    } catch (e: Throwable) {}
+                }
             }
-            for (rec in dynamicReceivers) {
-                try {
-                    context.sendBroadcast(Intent(intent).apply { component = rec })
-                } catch (e: Throwable) {}
-            }
-            for (svc in dynamicServices) {
-                try {
-                    context.startService(Intent(intent).apply { component = svc })
-                } catch (e: Throwable) {}
-            }
-        }
 
-        mainHandler.postDelayed({
+            delay(350L)
             requestRadioInfoPing()
             readCurrentSettingsFrequency()
-        }, 350L)
+        }
     }
 
     private fun registerSettingsObservers() {

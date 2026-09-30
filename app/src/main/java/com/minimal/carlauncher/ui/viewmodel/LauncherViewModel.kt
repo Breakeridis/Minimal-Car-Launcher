@@ -13,6 +13,7 @@ import com.minimal.carlauncher.service.SpeedometerManager
 import com.minimal.carlauncher.service.UpdateInfo
 import com.minimal.carlauncher.service.UpdateManager
 import org.osmdroid.util.GeoPoint
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -149,21 +150,20 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
     }
 
     fun loadApps() {
-        viewModelScope.launch {
+        viewModelScope.launch(Dispatchers.IO) {
             val apps = repository.getInstalledApps()
-            _allApps.value = apps
-
-            // Load or initialize pinned dock apps
-            _pinnedApps.value = repository.getPinnedApps(apps)
-
-            // Auto-detect or resolve user-customized key apps
-            _zlinkApp.value = apps.firstOrNull { it.isZLink }
-            _navigationApp.value = repository.resolveNavApp(apps)
-            _musicApp.value = repository.resolveMusicApp(apps)
+            val pinned = repository.getPinnedApps(apps)
+            val zlink = apps.firstOrNull { it.isZLink }
+            val nav = repository.resolveNavApp(apps)
+            val music = repository.resolveMusicApp(apps)
             val dvr = repository.resolveDvrApp(apps)
-            _dvrApp.value = dvr
 
-            // Auto-start DVR app disabled so camera is not procced by launcher (head unit handles it natively)
+            _allApps.value = apps
+            _pinnedApps.value = pinned
+            _zlinkApp.value = zlink
+            _navigationApp.value = nav
+            _musicApp.value = music
+            _dvrApp.value = dvr
             hasAutoStartedDvr = true
         }
     }

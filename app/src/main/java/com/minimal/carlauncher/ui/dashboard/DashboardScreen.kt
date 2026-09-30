@@ -32,10 +32,6 @@ fun DashboardScreen(
     viewModel: LauncherViewModel,
     modifier: Modifier = Modifier
 ) {
-    val currentTime by viewModel.currentTime.collectAsState()
-    val currentSeconds by viewModel.currentSeconds.collectAsState()
-    val currentDate by viewModel.currentDate.collectAsState()
-
     val currentSpeed by viewModel.speedometer.currentSpeed.collectAsState()
     val speedUnit by viewModel.speedometer.unit.collectAsState()
     val speedKmH = if (speedUnit == com.minimal.carlauncher.service.SpeedUnit.KMH) {
@@ -102,9 +98,9 @@ fun DashboardScreen(
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 ClockWidget(
-                    time = currentTime,
-                    seconds = currentSeconds,
-                    date = currentDate,
+                    timeFlow = viewModel.currentTime,
+                    secondsFlow = viewModel.currentSeconds,
+                    dateFlow = viewModel.currentDate,
                     modifier = Modifier
                         .fillMaxWidth()
                         .weight(0.72f)

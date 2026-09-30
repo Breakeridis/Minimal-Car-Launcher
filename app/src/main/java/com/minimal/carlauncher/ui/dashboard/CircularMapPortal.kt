@@ -340,7 +340,7 @@ fun CircularMapPortal(
     var dialRotation by remember { mutableFloatStateOf(bearing) }
     var isFirstFix by remember { mutableStateOf(true) }
 
-    // Smooth 60fps continuous interpolation for car movement & course-up map rotation
+    // Smooth 30fps continuous interpolation for car movement & course-up map rotation
     LaunchedEffect(location, bearing, speedKmH) {
         val targetLat = location?.latitude ?: currentLat
         val targetLon = location?.longitude ?: currentLon
@@ -361,7 +361,7 @@ fun CircularMapPortal(
             mapViewRef?.controller?.setCenter(pt)
             mapViewRef?.controller?.setZoom(initialZoom)
             mapViewRef?.mapOrientation = -targetBearing
-            mapViewRef?.invalidate()
+            mapViewRef?.postInvalidate()
             return@LaunchedEffect
         }
 
@@ -370,7 +370,28 @@ fun CircularMapPortal(
         val startBearing = currentBearing
         val bearingDiff = ((targetBearing - (startBearing % 360f) + 540f) % 360f) - 180f
 
-        val animDuration = 900L // 900ms smooth interpolation matching GPS 1Hz frequency
+        val isStationary = speedKmH < 1.5f
+        if (isStationary) {
+            // When stopped or parked, skip continuous animation loop to save 100% CPU/GPU overhead
+            if (kotlin.math.abs(bearingDiff) > 3f) {
+                currentBearing = targetBearing
+                if (kotlin.math.abs(targetBearing - dialRotation) >= 1f) {
+                    dialRotation = targetBearing
+                }
+                mapViewRef?.mapOrientation = -targetBearing
+                mapViewRef?.postInvalidate()
+            }
+            return@LaunchedEffect
+        }
+
+        // Throttled speed zoom: only update zoom when crossing speed brackets
+        val targetZoom = calculateTargetZoomForSpeed(speedKmH)
+        if (kotlin.math.abs(targetZoom - currentZoom) >= 0.35) {
+            currentZoom = targetZoom
+            mapViewRef?.controller?.setZoom(targetZoom)
+        }
+
+        val animDuration = 800L
         val startTime = SystemClock.elapsedRealtime()
 
         while (true) {
@@ -385,7 +406,11 @@ fun CircularMapPortal(
             currentLon = interpolatedLon
             val normBearing = ((interpolatedBearing % 360f) + 360f) % 360f
             currentBearing = normBearing
-            dialRotation = normBearing
+
+            // Only update dialRotation if angle change is >= 0.5 degrees to avoid micro-jitter recomposition
+            if (kotlin.math.abs(normBearing - dialRotation) >= 0.5f) {
+                dialRotation = normBearing
+            }
 
             val currentPoint = GeoPoint(interpolatedLat, interpolatedLon)
             vehicleOverlayRef?.location = currentPoint
@@ -393,19 +418,11 @@ fun CircularMapPortal(
             if (!isUserPanning) {
                 mapViewRef?.controller?.setCenter(currentPoint)
                 mapViewRef?.mapOrientation = -normBearing
-
-                // Automated speed-based dynamic zooming when centered on vehicle
-                val targetZoom = calculateTargetZoomForSpeed(speedKmH)
-                val zoomDiff = targetZoom - currentZoom
-                if (kotlin.math.abs(zoomDiff) > 0.01) {
-                    currentZoom += zoomDiff * 0.04
-                    mapViewRef?.controller?.setZoom(currentZoom)
-                }
             }
-            mapViewRef?.invalidate()
+            mapViewRef?.postInvalidate()
 
             if (fraction >= 1f) break
-            delay(16L) // ~60fps smooth step
+            delay(33L) // ~30fps smooth step (cuts GPU fill-rate and CPU load in half)
         }
     }
 
@@ -483,6 +500,8 @@ fun CircularMapPortal(
                         setTileSource(TileSourceFactory.MAPNIK)
                         setMultiTouchControls(true)
                         isTilesScaledToDpi = true
+                        isDestroyMode = false
+                        setHasTransientState(true)
                         controller.setZoom(16.5)
 
                         val initialLat = location?.latitude ?: 37.9838

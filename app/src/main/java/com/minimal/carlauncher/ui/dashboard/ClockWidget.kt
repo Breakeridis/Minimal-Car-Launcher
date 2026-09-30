@@ -28,6 +28,29 @@ import com.minimal.carlauncher.ui.theme.TextMuted
 import com.minimal.carlauncher.ui.theme.TextPrimary
 import com.minimal.carlauncher.ui.theme.TextSecondary
 
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import kotlinx.coroutines.flow.StateFlow
+
+@Composable
+fun ClockWidget(
+    timeFlow: StateFlow<String>,
+    secondsFlow: StateFlow<String>,
+    dateFlow: StateFlow<String>,
+    modifier: Modifier = Modifier
+) {
+    val time by timeFlow.collectAsState()
+    val seconds by secondsFlow.collectAsState()
+    val date by dateFlow.collectAsState()
+
+    ClockWidget(
+        time = time,
+        seconds = seconds,
+        date = date,
+        modifier = modifier
+    )
+}
+
 @Composable
 fun ClockWidget(
     time: String,
