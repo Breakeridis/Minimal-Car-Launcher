@@ -38,6 +38,7 @@ import androidx.compose.ui.unit.sp
 import com.minimal.carlauncher.data.AppInfo
 import com.minimal.carlauncher.ui.theme.AccentCyan
 import com.minimal.carlauncher.ui.theme.CarBorder
+import com.minimal.carlauncher.ui.theme.CarSurface
 import com.minimal.carlauncher.ui.theme.CarSurfaceVariant
 import com.minimal.carlauncher.ui.theme.TextPrimary
 import com.minimal.carlauncher.ui.theme.TextSecondary
@@ -59,9 +60,9 @@ fun LeftBottomDock(
 ) {
     val dockGradient = Brush.horizontalGradient(
         colors = listOf(
-            Color(0xFF131927),
-            Color(0xFF172033),
-            Color(0xFF131927)
+            CarSurface,
+            CarSurfaceVariant.copy(alpha = 0.5f),
+            CarSurface
         )
     )
 
@@ -179,9 +180,9 @@ fun RightBottomDock(
 ) {
     val dockGradient = Brush.horizontalGradient(
         colors = listOf(
-            Color(0xFF131927),
-            Color(0xFF172033),
-            Color(0xFF131927)
+            CarSurface,
+            CarSurfaceVariant.copy(alpha = 0.5f),
+            CarSurface
         )
     )
 

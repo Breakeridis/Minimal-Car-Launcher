@@ -23,6 +23,7 @@ import androidx.compose.ui.unit.sp
 import com.minimal.carlauncher.ui.theme.AccentCyan
 import com.minimal.carlauncher.ui.theme.CarBorder
 import com.minimal.carlauncher.ui.theme.CarSurface
+import com.minimal.carlauncher.ui.theme.CarSurfaceVariant
 import com.minimal.carlauncher.ui.theme.TextMuted
 import com.minimal.carlauncher.ui.theme.TextPrimary
 import com.minimal.carlauncher.ui.theme.TextSecondary
@@ -36,7 +37,7 @@ fun ClockWidget(
 ) {
     val cardGradient = Brush.verticalGradient(
         colors = listOf(
-            Color(0xFF161E2E),
+            CarSurfaceVariant.copy(alpha = 0.5f),
             CarSurface
         )
     )

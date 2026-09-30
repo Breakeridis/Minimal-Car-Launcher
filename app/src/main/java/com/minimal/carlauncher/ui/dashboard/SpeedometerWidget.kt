@@ -57,7 +57,7 @@ fun SpeedometerWidget(
 
     val cardGradient = Brush.verticalGradient(
         colors = listOf(
-            Color(0xFF161E2E),
+            CarSurfaceVariant.copy(alpha = 0.5f),
             CarSurface
         )
     )

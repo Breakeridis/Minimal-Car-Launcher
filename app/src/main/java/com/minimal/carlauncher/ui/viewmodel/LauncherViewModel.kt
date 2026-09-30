@@ -65,8 +65,9 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
     private val _dvrApp = MutableStateFlow<AppInfo?>(null)
     val dvrApp: StateFlow<AppInfo?> = _dvrApp.asStateFlow()
 
-    private val _isMapDarkMode = MutableStateFlow(repository.isMapDarkMode())
-    val isMapDarkMode: StateFlow<Boolean> = _isMapDarkMode.asStateFlow()
+    private val _isDarkMode = MutableStateFlow(repository.isDarkMode())
+    val isDarkMode: StateFlow<Boolean> = _isDarkMode.asStateFlow()
+    val isMapDarkMode: StateFlow<Boolean> = _isDarkMode.asStateFlow()
 
     private var hasAutoStartedDvr = false
 
@@ -492,10 +493,14 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
         speedometer.toggleUnit()
     }
 
+    fun toggleDarkMode() {
+        val next = !_isDarkMode.value
+        _isDarkMode.value = next
+        repository.setDarkMode(next)
+    }
+
     fun toggleMapDarkMode() {
-        val next = !_isMapDarkMode.value
-        _isMapDarkMode.value = next
-        repository.setMapDarkMode(next)
+        toggleDarkMode()
     }
 
     fun refreshRadio() {

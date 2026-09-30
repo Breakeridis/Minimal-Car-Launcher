@@ -267,7 +267,6 @@ fun CircularMapPortal(
     onOpenSearch: () -> Unit = {},
     onOpenNavigation: () -> Unit = {},
     isMapDarkMode: Boolean = false,
-    onToggleMapDarkMode: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -427,28 +426,28 @@ fun CircularMapPortal(
     val cardinalTextSize = with(density) { 18.sp.toPx() }
     val subTextSize = with(density) { 13.sp.toPx() }
 
-    val textPaintNorth = remember(northTextSize) {
+    val textPaintNorth = remember(northTextSize, isMapDarkMode) {
         AndroidPaint(AndroidPaint.ANTI_ALIAS_FLAG).apply {
             textAlign = AndroidPaint.Align.CENTER
-            color = android.graphics.Color.parseColor("#00F0FF") // Vivid Electric Cyan
+            color = if (isMapDarkMode) android.graphics.Color.parseColor("#00F0FF") else android.graphics.Color.parseColor("#0284C7")
             textSize = northTextSize
             typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
         }
     }
 
-    val textPaintCardinal = remember(cardinalTextSize) {
+    val textPaintCardinal = remember(cardinalTextSize, isMapDarkMode) {
         AndroidPaint(AndroidPaint.ANTI_ALIAS_FLAG).apply {
             textAlign = AndroidPaint.Align.CENTER
-            color = android.graphics.Color.WHITE // Maximum contrast pure white
+            color = if (isMapDarkMode) android.graphics.Color.WHITE else android.graphics.Color.parseColor("#0F172A")
             textSize = cardinalTextSize
             typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
         }
     }
 
-    val textPaintSub = remember(subTextSize) {
+    val textPaintSub = remember(subTextSize, isMapDarkMode) {
         AndroidPaint(AndroidPaint.ANTI_ALIAS_FLAG).apply {
             textAlign = AndroidPaint.Align.CENTER
-            color = android.graphics.Color.parseColor("#94A3B8") // Slate 400
+            color = if (isMapDarkMode) android.graphics.Color.parseColor("#94A3B8") else android.graphics.Color.parseColor("#64748B")
             textSize = subTextSize
             typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
         }
@@ -622,28 +621,6 @@ fun CircularMapPortal(
                         imageVector = Icons.Default.GpsFixed,
                         contentDescription = "Recenter",
                         tint = if (isUserPanning) AccentAmber else if (isGpsActive) AccentGreen else AccentAmber,
-                        modifier = Modifier.size(19.dp)
-                    )
-                }
-
-                // Map Day/Night Light Mode Toggle
-                Box(
-                    modifier = Modifier
-                        .size(38.dp)
-                        .clip(CircleShape)
-                        .background(CarSurface.copy(alpha = 0.88f))
-                        .border(
-                            1.dp,
-                            if (!isMapDarkMode) AccentAmber.copy(alpha = 0.7f) else CarBorder.copy(alpha = 0.6f),
-                            CircleShape
-                        )
-                        .clickable { onToggleMapDarkMode() },
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = if (isMapDarkMode) Icons.Default.LightMode else Icons.Default.DarkMode,
-                        contentDescription = if (isMapDarkMode) "Switch to Light Map" else "Switch to Dark Map",
-                        tint = if (isMapDarkMode) TextSecondary else AccentAmber,
                         modifier = Modifier.size(19.dp)
                     )
                 }
@@ -873,6 +850,9 @@ fun CircularMapPortal(
                 )
 
                 // Rotating dial markers (synchronous with course-up map rotation)
+                val cardinalTickColor = if (isMapDarkMode) Color.White else Color(0xFF0F172A)
+                val subTickColor = if (isMapDarkMode) Color(0xFF94A3B8) else Color(0xFF64748B)
+
                 rotate(degrees = -dialRotation, pivot = center) {
                     for (angle in 0 until 360 step 15) {
                         rotate(degrees = angle.toFloat(), pivot = center) {
@@ -896,9 +876,9 @@ fun CircularMapPortal(
                                     }
                                 }
                                 90 -> {
-                                    // East (90°) - High-contrast Pure White Bold Text
+                                    // East (90°) - High-contrast Bold Text
                                     drawLine(
-                                        color = Color.White,
+                                        color = cardinalTickColor,
                                         start = Offset(center.x, center.y - radius),
                                         end = Offset(center.x, center.y - radius + 10.dp.toPx()),
                                         strokeWidth = 2.5.dp.toPx(),
@@ -914,9 +894,9 @@ fun CircularMapPortal(
                                     }
                                 }
                                 180 -> {
-                                    // South (180°) - High-contrast Pure White Bold Text
+                                    // South (180°) - High-contrast Bold Text
                                     drawLine(
-                                        color = Color.White,
+                                        color = cardinalTickColor,
                                         start = Offset(center.x, center.y - radius),
                                         end = Offset(center.x, center.y - radius + 10.dp.toPx()),
                                         strokeWidth = 2.5.dp.toPx(),
@@ -932,9 +912,9 @@ fun CircularMapPortal(
                                     }
                                 }
                                 270 -> {
-                                    // West (270°) - High-contrast Pure White Bold Text
+                                    // West (270°) - High-contrast Bold Text
                                     drawLine(
-                                        color = Color.White,
+                                        color = cardinalTickColor,
                                         start = Offset(center.x, center.y - radius),
                                         end = Offset(center.x, center.y - radius + 10.dp.toPx()),
                                         strokeWidth = 2.5.dp.toPx(),
@@ -957,7 +937,7 @@ fun CircularMapPortal(
                                         else -> "NW"
                                     }
                                     drawLine(
-                                        color = Color(0xFF94A3B8),
+                                        color = subTickColor,
                                         start = Offset(center.x, center.y - radius),
                                         end = Offset(center.x, center.y - radius + 8.dp.toPx()),
                                         strokeWidth = 1.8.dp.toPx(),

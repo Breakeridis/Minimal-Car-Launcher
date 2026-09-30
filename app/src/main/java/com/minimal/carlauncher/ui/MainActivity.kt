@@ -11,6 +11,8 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.core.content.ContextCompat
 import com.minimal.carlauncher.ui.dashboard.DashboardScreen
 import com.minimal.carlauncher.ui.theme.CarLauncherTheme
@@ -46,7 +48,8 @@ class MainActivity : ComponentActivity() {
         }
 
         setContent {
-            CarLauncherTheme {
+            val isDarkMode by viewModel.isDarkMode.collectAsState()
+            CarLauncherTheme(isDarkMode = isDarkMode) {
                 DashboardScreen(viewModel = viewModel)
             }
         }

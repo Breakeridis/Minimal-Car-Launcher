@@ -142,7 +142,7 @@ fun DvrHeroCard(
 ) {
     val gradientBrush = Brush.linearGradient(
         colors = listOf(
-            Color(0xFF0F172A), // Deep cockpit slate
+            CarSurfaceVariant.copy(alpha = 0.5f),
             CarSurface
         )
     )
@@ -187,8 +187,8 @@ fun DvrHeroCard(
                 Row(
                     modifier = Modifier
                         .clip(RoundedCornerShape(10.dp))
-                        .background(Color(0xFF1E293B))
-                        .border(1.dp, Color(0xFFEF4444).copy(alpha = 0.6f), RoundedCornerShape(10.dp))
+                        .background(CarSurfaceVariant)
+                        .border(1.dp, AccentRed.copy(alpha = 0.6f), RoundedCornerShape(10.dp))
                         .padding(horizontal = 10.dp, vertical = 6.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
@@ -196,14 +196,14 @@ fun DvrHeroCard(
                         modifier = Modifier
                             .size(8.dp)
                             .clip(CircleShape)
-                            .background(Color(0xFFEF4444))
+                            .background(AccentRed)
                     )
                     Spacer(modifier = Modifier.width(6.dp))
                     Text(
                         text = "LIVE DVR",
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Bold,
-                        color = Color(0xFFEF4444),
+                        color = AccentRed,
                         letterSpacing = 0.8.sp
                     )
                 }
@@ -251,13 +251,13 @@ fun ActionTile(
         Brush.horizontalGradient(
             colors = listOf(
                 CarSurface,
-                accentColor.copy(alpha = 0.08f)
+                accentColor.copy(alpha = 0.12f)
             )
         )
     } else {
         Brush.horizontalGradient(
             colors = listOf(
-                Color(0xFF161E2E),
+                CarSurfaceVariant.copy(alpha = 0.4f),
                 CarSurface
             )
         )
