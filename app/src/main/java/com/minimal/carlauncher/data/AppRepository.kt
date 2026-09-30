@@ -463,7 +463,9 @@ class AppRepository(private val context: Context) {
     }
 
     fun getSavedRadioStations(): List<String> {
-        val raw = prefs.getString("key_saved_radio_stations_v1", null)
+        val raw = prefs.getString("key_saved_radio_stations_v2", null)
+            ?: prefs.getString("key_saved_radio_stations_v1", null)
+        val defaultList = listOf("88.6", "95.2", "98.5", "103.7")
         if (!raw.isNullOrBlank()) {
             try {
                 val array = JSONArray(raw)
@@ -471,21 +473,26 @@ class AppRepository(private val context: Context) {
                 for (i in 0 until array.length()) {
                     list.add(array.getString(i))
                 }
-                if (list.isNotEmpty()) return list.take(3)
+                if (list.isNotEmpty()) {
+                    while (list.size < 4 && list.size < defaultList.size) {
+                        list.add(defaultList[list.size])
+                    }
+                    return list.take(4)
+                }
             } catch (e: Exception) {
                 e.printStackTrace()
             }
         }
-        return listOf("89.2", "98.5", "103.7")
+        return defaultList
     }
 
     fun setSavedRadioStation(index: Int, station: String) {
         val current = getSavedRadioStations().toMutableList()
-        while (current.size < 3) current.add("--.-")
-        if (index in 0 until 3) {
+        while (current.size < 4) current.add("--.-")
+        if (index in 0 until 4) {
             current[index] = station
             val array = JSONArray(current)
-            prefs.edit().putString("key_saved_radio_stations_v1", array.toString()).apply()
+            prefs.edit().putString("key_saved_radio_stations_v2", array.toString()).apply()
         }
     }
 }

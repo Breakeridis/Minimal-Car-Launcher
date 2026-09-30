@@ -87,7 +87,7 @@ fun RadioStationWidget(
             .clip(RoundedCornerShape(20.dp))
             .background(cardGradient)
             .border(1.dp, CarBorder.copy(alpha = 0.6f), RoundedCornerShape(20.dp))
-            .padding(14.dp)
+            .padding(horizontal = 12.dp, vertical = 10.dp)
     ) {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
@@ -152,7 +152,7 @@ fun RadioStationWidget(
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(12.dp))
                     .clickable { onLaunchRadio() }
-                    .padding(vertical = 4.dp)
+                    .padding(vertical = 2.dp)
             ) {
                 if (hasStation) {
                     Row(
@@ -161,19 +161,19 @@ fun RadioStationWidget(
                     ) {
                         Text(
                             text = freqDisplay,
-                            fontSize = 38.sp,
+                            fontSize = 50.sp,
                             fontWeight = FontWeight.Black,
                             color = TextPrimary,
                             letterSpacing = (-0.5).sp,
-                            lineHeight = 38.sp
+                            lineHeight = 50.sp
                         )
                         Spacer(modifier = Modifier.width(6.dp))
                         Text(
                             text = bandDisplay,
-                            fontSize = 16.sp,
+                            fontSize = 20.sp,
                             fontWeight = FontWeight.Bold,
                             color = AccentAmber,
-                            modifier = Modifier.padding(bottom = 4.dp)
+                            modifier = Modifier.padding(bottom = 6.dp)
                         )
                     }
 
@@ -181,7 +181,7 @@ fun RadioStationWidget(
                         Spacer(modifier = Modifier.height(2.dp))
                         Text(
                             text = stationName,
-                            fontSize = 13.sp,
+                            fontSize = 17.sp,
                             fontWeight = FontWeight.SemiBold,
                             color = AccentCyan,
                             maxLines = 1,
@@ -191,7 +191,7 @@ fun RadioStationWidget(
                 } else {
                     Text(
                         text = "FM RADIO",
-                        fontSize = 28.sp,
+                        fontSize = 36.sp,
                         fontWeight = FontWeight.Black,
                         color = TextPrimary,
                         letterSpacing = (-0.5).sp
@@ -199,26 +199,26 @@ fun RadioStationWidget(
                     Spacer(modifier = Modifier.height(2.dp))
                     Text(
                         text = "Tap to open tuner",
-                        fontSize = 12.sp,
+                        fontSize = 15.sp,
                         fontWeight = FontWeight.Medium,
                         color = TextSecondary
                     )
                 }
             }
 
-            // Quick-Access Saved / Collected Stations Row (Top 3)
+            // Quick-Access Saved / Collected Stations Row (Top 4)
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(vertical = 2.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                val displayStations = if (savedStations.size >= 3) {
-                    savedStations.take(3)
+                val displayStations = if (savedStations.size >= 4) {
+                    savedStations.take(4)
                 } else {
                     val list = savedStations.toMutableList()
-                    while (list.size < 3) list.add("P${list.size + 1}")
+                    while (list.size < 4) list.add("P${list.size + 1}")
                     list
                 }
 
@@ -232,7 +232,7 @@ fun RadioStationWidget(
                     Box(
                         modifier = Modifier
                             .weight(1f)
-                            .height(34.dp)
+                            .height(40.dp)
                             .clip(RoundedCornerShape(10.dp))
                             .background(chipBg)
                             .border(1.2.dp, chipBorder, RoundedCornerShape(10.dp))
@@ -244,7 +244,7 @@ fun RadioStationWidget(
                     ) {
                         Text(
                             text = station,
-                            fontSize = 13.sp,
+                            fontSize = 15.sp,
                             fontWeight = if (isCurrent) FontWeight.Black else FontWeight.SemiBold,
                             color = chipTextColor,
                             maxLines = 1
@@ -262,19 +262,19 @@ fun RadioStationWidget(
                 // Minus / Previous Station Button
                 Box(
                     modifier = Modifier
-                        .size(width = 68.dp, height = 46.dp)
-                        .clip(RoundedCornerShape(14.dp))
+                        .size(width = 82.dp, height = 55.dp)
+                        .clip(RoundedCornerShape(16.dp))
                         .background(CarSurfaceVariant)
-                        .border(1.dp, CarBorder, RoundedCornerShape(14.dp))
+                        .border(1.dp, CarBorder, RoundedCornerShape(16.dp))
                         .clickable { onTunePrevious() },
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
                         text = "−",
-                        fontSize = 32.sp,
+                        fontSize = 38.sp,
                         fontWeight = FontWeight.Bold,
                         color = AccentAmber,
-                        lineHeight = 32.sp
+                        lineHeight = 38.sp
                     )
                 }
 
@@ -289,19 +289,19 @@ fun RadioStationWidget(
                 // Plus / Next Station Button
                 Box(
                     modifier = Modifier
-                        .size(width = 68.dp, height = 46.dp)
-                        .clip(RoundedCornerShape(14.dp))
+                        .size(width = 82.dp, height = 55.dp)
+                        .clip(RoundedCornerShape(16.dp))
                         .background(CarSurfaceVariant)
-                        .border(1.dp, CarBorder, RoundedCornerShape(14.dp))
+                        .border(1.dp, CarBorder, RoundedCornerShape(16.dp))
                         .clickable { onTuneNext() },
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
                         text = "+",
-                        fontSize = 28.sp,
+                        fontSize = 34.sp,
                         fontWeight = FontWeight.Bold,
                         color = AccentAmber,
-                        lineHeight = 28.sp
+                        lineHeight = 34.sp
                     )
                 }
             }

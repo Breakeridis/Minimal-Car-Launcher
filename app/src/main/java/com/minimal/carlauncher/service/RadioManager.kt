@@ -1,6 +1,7 @@
 package com.minimal.carlauncher.service
 
 import android.content.BroadcastReceiver
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
@@ -583,173 +584,269 @@ class RadioManager(private val context: Context) {
         _savedStations.value = repository.getSavedRadioStations()
     }
 
+    private fun getDynamicRadioTargets(): Pair<List<ComponentName>, List<ComponentName>> {
+        val pm = context.packageManager
+        val receivers = mutableListOf<ComponentName>()
+        val services = mutableListOf<ComponentName>()
+        try {
+            val installed = pm.getInstalledPackages(
+                android.content.pm.PackageManager.GET_RECEIVERS or android.content.pm.PackageManager.GET_SERVICES
+            )
+            for (pkg in installed) {
+                val pName = pkg.packageName.lowercase()
+                if (pName.contains("radio") || pName.contains("nwd") || pName.contains("allwinner") || pName.contains("qf")) {
+                    pkg.receivers?.forEach { r ->
+                        receivers.add(ComponentName(pkg.packageName, r.name))
+                    }
+                    pkg.services?.forEach { s ->
+                        services.add(ComponentName(pkg.packageName, s.name))
+                    }
+                }
+            }
+        } catch (e: Throwable) {}
+        return Pair(receivers, services)
+    }
+
     /**
      * Broadcasts tune / seek previous commands across NWD, QF, Allwinner and automotive HAL daemons.
      */
     fun tunePreviousStation() {
-        // 1. Direct Shell Input Key Injection (Global on Android automotive ROMs)
-        try {
-            Runtime.getRuntime().exec(arrayOf("input", "keyevent", "88")) // KEYCODE_MEDIA_PREVIOUS
-        } catch (e: Throwable) {}
-
-        // 2. Dispatch Media Key Events to Audio System
-        try {
-            val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as? android.media.AudioManager
-            audioManager?.dispatchMediaKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_MEDIA_PREVIOUS))
-            audioManager?.dispatchMediaKeyEvent(KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_MEDIA_PREVIOUS))
-            audioManager?.dispatchMediaKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_MEDIA_STEP_BACKWARD))
-            audioManager?.dispatchMediaKeyEvent(KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_MEDIA_STEP_BACKWARD))
-        } catch (e: Throwable) {}
-
-        // 3. ACTION_MEDIA_BUTTON Broadcasts (Both ordered global and package-targeted)
-        try {
-            val downIntent = Intent(Intent.ACTION_MEDIA_BUTTON).apply {
-                putExtra(Intent.EXTRA_KEY_EVENT, KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_MEDIA_PREVIOUS))
-                addFlags(Intent.FLAG_RECEIVER_FOREGROUND)
-            }
-            val upIntent = Intent(Intent.ACTION_MEDIA_BUTTON).apply {
-                putExtra(Intent.EXTRA_KEY_EVENT, KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_MEDIA_PREVIOUS))
-                addFlags(Intent.FLAG_RECEIVER_FOREGROUND)
-            }
-            context.sendOrderedBroadcast(downIntent, null)
-            context.sendOrderedBroadcast(upIntent, null)
-            for (pkg in radioPackages) {
-                try {
-                    context.sendBroadcast(Intent(downIntent).apply { setPackage(pkg) })
-                    context.sendBroadcast(Intent(upIntent).apply { setPackage(pkg) })
-                } catch (e: Throwable) {}
-            }
-        } catch (e: Throwable) {}
-
-        // 4. Comprehensive NWD, QF, and Allwinner Radio Broadcast Intents
-        val commands = listOf("prev", "tune_down", "seek_down", "step_down", "channel_down")
-        val intents = mutableListOf<Intent>()
-        for (cmd in commands) {
-            intents.add(Intent("com.nwd.action.ACTION_SEND_RADIO_COMMAND").apply {
-                putExtra("command", cmd)
-                putExtra("extra_command", cmd)
-                putExtra("cmd", cmd)
-                putExtra("action", cmd)
-                putExtra("extra_cmd", 3)
-                putExtra("nwd_cmd", 3)
-            })
-            intents.add(Intent("com.nwd.radio.action").apply {
-                putExtra("action", cmd)
-                putExtra("cmd", cmd)
-            })
-            intents.add(Intent("com.qf.radio.action").apply {
-                putExtra("action", cmd)
-                putExtra("cmd", cmd)
-            })
-        }
-        intents.add(Intent("com.nwd.radio.prev"))
-        intents.add(Intent("com.nwd.radio.tune_down"))
-        intents.add(Intent("com.nwd.radio.seek_down"))
-        intents.add(Intent("com.nwd.link.radio.prev"))
-        intents.add(Intent("com.qf.action.RADIO_PREV"))
-        intents.add(Intent("com.allwinner.radio.prev"))
-        intents.add(Intent("com.allwinner.radio.ACTION_PREV"))
-        intents.add(Intent("com.nwd.action.ACTION_SEND_KEY_CODE").apply { putExtra("keyCode", 88) })
-        intents.add(Intent("com.nwd.action.ACTION_KEY").apply { putExtra("key", "prev"); putExtra("keyCode", 88) })
-
-        for (intent in intents) {
-            intent.addFlags(Intent.FLAG_RECEIVER_FOREGROUND or Intent.FLAG_INCLUDE_STOPPED_PACKAGES)
-            try {
-                context.sendBroadcast(intent)
-            } catch (e: Throwable) {}
-            for (pkg in radioPackages) {
-                try {
-                    context.sendBroadcast(Intent(intent).apply { setPackage(pkg) })
-                } catch (e: Throwable) {}
-            }
-        }
-
-        mainHandler.postDelayed({
-            requestRadioInfoPing()
-            readCurrentSettingsFrequency()
-        }, 350L)
+        dispatchRadioCommand(isNext = false)
     }
 
     /**
      * Broadcasts tune / seek next commands across NWD, QF, Allwinner and automotive HAL daemons.
      */
     fun tuneNextStation() {
-        // 1. Direct Shell Input Key Injection (Global on Android automotive ROMs)
-        try {
-            Runtime.getRuntime().exec(arrayOf("input", "keyevent", "87")) // KEYCODE_MEDIA_NEXT
-        } catch (e: Throwable) {}
+        dispatchRadioCommand(isNext = true)
+    }
 
-        // 2. Dispatch Media Key Events to Audio System
+    /**
+     * Comprehensive multi-tier command dispatcher for NWD K2401P, QF, Allwinner and generic automotive units.
+     * Combines Shell input key injection, AudioManager media/channel key events, explicit component broadcasts,
+     * explicit service start commands, and multi-format (Int & String) NWD IPC commands.
+     */
+    private fun dispatchRadioCommand(isNext: Boolean) {
+        val primaryKeyCode = if (isNext) KeyEvent.KEYCODE_MEDIA_NEXT else KeyEvent.KEYCODE_MEDIA_PREVIOUS
+        val channelKeyCode = if (isNext) KeyEvent.KEYCODE_CHANNEL_UP else KeyEvent.KEYCODE_CHANNEL_DOWN
+        val stepKeyCode = if (isNext) KeyEvent.KEYCODE_MEDIA_STEP_FORWARD else KeyEvent.KEYCODE_MEDIA_STEP_BACKWARD
+        val skipKeyCode = if (isNext) KeyEvent.KEYCODE_MEDIA_SKIP_FORWARD else KeyEvent.KEYCODE_MEDIA_SKIP_BACKWARD
+
+        val keyCodes = listOf(primaryKeyCode, channelKeyCode, stepKeyCode, skipKeyCode)
+
+        // 1. Direct Shell Input Key Injection (Global on Android automotive ROMs)
+        for (code in listOf(primaryKeyCode, channelKeyCode)) {
+            try {
+                Runtime.getRuntime().exec(arrayOf("input", "keyevent", code.toString()))
+            } catch (e: Throwable) {}
+        }
+
+        // 2. Dispatch Media & Channel Key Events to Audio System
         try {
             val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as? android.media.AudioManager
-            audioManager?.dispatchMediaKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_MEDIA_NEXT))
-            audioManager?.dispatchMediaKeyEvent(KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_MEDIA_NEXT))
-            audioManager?.dispatchMediaKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_MEDIA_STEP_FORWARD))
-            audioManager?.dispatchMediaKeyEvent(KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_MEDIA_STEP_FORWARD))
+            for (code in keyCodes) {
+                audioManager?.dispatchMediaKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, code))
+                audioManager?.dispatchMediaKeyEvent(KeyEvent(KeyEvent.ACTION_UP, code))
+            }
         } catch (e: Throwable) {}
 
         // 3. ACTION_MEDIA_BUTTON Broadcasts (Both ordered global and package-targeted)
-        try {
-            val downIntent = Intent(Intent.ACTION_MEDIA_BUTTON).apply {
-                putExtra(Intent.EXTRA_KEY_EVENT, KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_MEDIA_NEXT))
-                addFlags(Intent.FLAG_RECEIVER_FOREGROUND)
+        for (code in keyCodes) {
+            try {
+                val downIntent = Intent(Intent.ACTION_MEDIA_BUTTON).apply {
+                    putExtra(Intent.EXTRA_KEY_EVENT, KeyEvent(KeyEvent.ACTION_DOWN, code))
+                    addFlags(Intent.FLAG_RECEIVER_FOREGROUND)
+                }
+                val upIntent = Intent(Intent.ACTION_MEDIA_BUTTON).apply {
+                    putExtra(Intent.EXTRA_KEY_EVENT, KeyEvent(KeyEvent.ACTION_UP, code))
+                    addFlags(Intent.FLAG_RECEIVER_FOREGROUND)
+                }
+                context.sendOrderedBroadcast(downIntent, null)
+                context.sendOrderedBroadcast(upIntent, null)
+                for (pkg in radioPackages) {
+                    try {
+                        context.sendBroadcast(Intent(downIntent).apply { setPackage(pkg) })
+                        context.sendBroadcast(Intent(upIntent).apply { setPackage(pkg) })
+                    } catch (e: Throwable) {}
+                }
+            } catch (e: Throwable) {}
+        }
+
+        // 4. Discover Dynamic Radio Receivers and Services from PackageManager
+        val (dynamicReceivers, dynamicServices) = getDynamicRadioTargets()
+        val allTargetPackages = (radioPackages + dynamicReceivers.map { it.packageName } + dynamicServices.map { it.packageName }).distinct()
+
+        // 5. Build Comprehensive Action Lists & Intent Bundles
+        val stringCommands = if (isNext) {
+            listOf("next", "seek_next", "seek_up", "tune_up", "step_up", "channel_up", "up", "search_up", "forward")
+        } else {
+            listOf("prev", "seek_prev", "seek_down", "tune_down", "step_down", "channel_down", "down", "search_down", "backward")
+        }
+
+        // MCU & NWD Integer Opcode variants:
+        // 3 = SEEK_DOWN/PREV, 4 = SEEK_UP/NEXT
+        // 7 = STEP_DOWN, 8 = STEP_UP
+        // 9 = TUNE_DOWN, 10 = TUNE_UP
+        // 11 = CMD_PREV, 12 = CMD_NEXT
+        // 21 = SEEK_PREV, 22 = SEEK_NEXT
+        val intCommands = if (isNext) {
+            listOf(4, 12, 8, 10, 22, 87, 166)
+        } else {
+            listOf(3, 11, 7, 9, 21, 88, 167)
+        }
+
+        val specificActions = if (isNext) {
+            listOf(
+                "com.nwd.radio.next",
+                "com.nwd.radio.tune_up",
+                "com.nwd.radio.seek_up",
+                "com.nwd.radio.step_up",
+                "com.nwd.link.radio.next",
+                "com.qf.action.RADIO_NEXT",
+                "com.qf.action.KEY_NEXT",
+                "com.allwinner.radio.next",
+                "com.allwinner.radio.ACTION_NEXT",
+                "android.intent.action.NEXT"
+            )
+        } else {
+            listOf(
+                "com.nwd.radio.prev",
+                "com.nwd.radio.tune_down",
+                "com.nwd.radio.seek_down",
+                "com.nwd.radio.step_down",
+                "com.nwd.link.radio.prev",
+                "com.qf.action.RADIO_PREV",
+                "com.qf.action.KEY_PREV",
+                "com.allwinner.radio.prev",
+                "com.allwinner.radio.ACTION_PREV",
+                "android.intent.action.PREV"
+            )
+        }
+
+        val commonActions = listOf(
+            "com.nwd.action.ACTION_SEND_RADIO_COMMAND",
+            "com.nwd.action.ACTION_RADIO_CMD",
+            "com.nwd.action.ACTION_CAR_KEY",
+            "com.nwd.radio.action",
+            "com.nwd.radio.command",
+            "com.nwd.radio.cmd",
+            "com.qf.radio.action",
+            "com.qf.action.RADIO_COMMAND",
+            "com.allwinner.radio.ACTION_COMMAND",
+            "com.allwinner.radio.command",
+            "com.allwinner.radio.action",
+            "com.microntek.sync",
+            "com.syu.radio"
+        )
+
+        val intentsToSend = mutableListOf<Intent>()
+
+        // 5a. Specific Actions
+        for (act in specificActions) {
+            intentsToSend.add(Intent(act).apply {
+                putExtra("keyCode", primaryKeyCode)
+                putExtra("key", if (isNext) "next" else "prev")
+            })
+        }
+
+        // 5b. Common Actions with String Commands
+        for (act in commonActions) {
+            for (sc in stringCommands) {
+                intentsToSend.add(Intent(act).apply {
+                    putExtra("command", sc)
+                    putExtra("extra_command", sc)
+                    putExtra("cmd", sc)
+                    putExtra("action", sc)
+                    putExtra("key", sc)
+                    putExtra("keyCode", primaryKeyCode)
+                    putExtra("extra_cmd", if (isNext) 4 else 3)
+                    putExtra("nwd_cmd", if (isNext) 4 else 3)
+                })
             }
-            val upIntent = Intent(Intent.ACTION_MEDIA_BUTTON).apply {
-                putExtra(Intent.EXTRA_KEY_EVENT, KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_MEDIA_NEXT))
-                addFlags(Intent.FLAG_RECEIVER_FOREGROUND)
+        }
+
+        // 5c. Common Actions with Integer Commands
+        for (act in commonActions) {
+            for (ic in intCommands) {
+                intentsToSend.add(Intent(act).apply {
+                    putExtra("command", ic)
+                    putExtra("extra_command", ic)
+                    putExtra("cmd", ic)
+                    putExtra("action", ic)
+                    putExtra("extra_cmd", ic)
+                    putExtra("nwd_cmd", ic)
+                    putExtra("cmd_id", ic)
+                    putExtra("opcode", ic)
+                    putExtra("code", ic)
+                    putExtra("type", ic)
+                    putExtra("keyCode", primaryKeyCode)
+                })
             }
-            context.sendOrderedBroadcast(downIntent, null)
-            context.sendOrderedBroadcast(upIntent, null)
-            for (pkg in radioPackages) {
+        }
+
+        // 5d. Hardware / Key Code Specific Actions
+        intentsToSend.add(Intent("com.nwd.action.ACTION_SEND_KEY_CODE").apply {
+            putExtra("keyCode", primaryKeyCode)
+            putExtra("key_code", primaryKeyCode)
+        })
+        intentsToSend.add(Intent("com.nwd.action.ACTION_KEY").apply {
+            putExtra("key", if (isNext) "next" else "prev")
+            putExtra("keyCode", primaryKeyCode)
+        })
+        intentsToSend.add(Intent("com.nwd.action.ACTION_CAR_KEY").apply {
+            putExtra("key_code", primaryKeyCode)
+            putExtra("keyCode", primaryKeyCode)
+        })
+
+        // 6. Execute Dispatch (Global, Package-Targeted, Component-Targeted Broadcasts & Services)
+        for (baseIntent in intentsToSend) {
+            baseIntent.addFlags(Intent.FLAG_RECEIVER_FOREGROUND or Intent.FLAG_INCLUDE_STOPPED_PACKAGES)
+
+            // 6a. Implicit Broadcast
+            try {
+                context.sendBroadcast(baseIntent)
+            } catch (e: Throwable) {}
+
+            // 6b. Package-targeted Broadcasts
+            for (pkg in allTargetPackages) {
                 try {
-                    context.sendBroadcast(Intent(downIntent).apply { setPackage(pkg) })
-                    context.sendBroadcast(Intent(upIntent).apply { setPackage(pkg) })
+                    context.sendBroadcast(Intent(baseIntent).apply { setPackage(pkg) })
                 } catch (e: Throwable) {}
+            }
+
+            // 6c. Explicit Component Broadcasts
+            for (rec in dynamicReceivers) {
+                try {
+                    context.sendBroadcast(Intent(baseIntent).apply { component = rec })
+                } catch (e: Throwable) {}
+            }
+
+            // 6d. Explicit Service Start Commands (Delivers to onStartCommand)
+            for (svc in dynamicServices) {
+                try {
+                    context.startService(Intent(baseIntent).apply { component = svc })
+                } catch (e: Throwable) {}
+            }
+        }
+
+        // 7. Direct Stepped Frequency Fallback
+        try {
+            val current = _radioStation.value
+            if (!current.isNullOrBlank()) {
+                val match = Regex("""(\d{2,4}(?:\.\d{1,2})?)""").find(current)
+                if (match != null) {
+                    val currDouble = match.value.toDoubleOrNull()
+                    if (currDouble != null && currDouble in 87.0..108.5) {
+                        val delta = if (isNext) 0.1 else -0.1
+                        var target = (Math.round((currDouble + delta) * 10.0) / 10.0)
+                        if (target > 108.0) target = 87.5
+                        if (target < 87.5) target = 108.0
+                        val targetStr = String.format(Locale.US, "%.1f", target)
+                        tuneToStation(targetStr, -1)
+                    }
+                }
             }
         } catch (e: Throwable) {}
-
-        // 4. Comprehensive NWD, QF, and Allwinner Radio Broadcast Intents
-        val commands = listOf("next", "tune_up", "seek_up", "step_up", "channel_up")
-        val intents = mutableListOf<Intent>()
-        for (cmd in commands) {
-            intents.add(Intent("com.nwd.action.ACTION_SEND_RADIO_COMMAND").apply {
-                putExtra("command", cmd)
-                putExtra("extra_command", cmd)
-                putExtra("cmd", cmd)
-                putExtra("action", cmd)
-                putExtra("extra_cmd", 4)
-                putExtra("nwd_cmd", 4)
-            })
-            intents.add(Intent("com.nwd.radio.action").apply {
-                putExtra("action", cmd)
-                putExtra("cmd", cmd)
-            })
-            intents.add(Intent("com.qf.radio.action").apply {
-                putExtra("action", cmd)
-                putExtra("cmd", cmd)
-            })
-        }
-        intents.add(Intent("com.nwd.radio.next"))
-        intents.add(Intent("com.nwd.radio.tune_up"))
-        intents.add(Intent("com.nwd.radio.seek_up"))
-        intents.add(Intent("com.nwd.link.radio.next"))
-        intents.add(Intent("com.qf.action.RADIO_NEXT"))
-        intents.add(Intent("com.allwinner.radio.next"))
-        intents.add(Intent("com.allwinner.radio.ACTION_NEXT"))
-        intents.add(Intent("com.nwd.action.ACTION_SEND_KEY_CODE").apply { putExtra("keyCode", 87) })
-        intents.add(Intent("com.nwd.action.ACTION_KEY").apply { putExtra("key", "next"); putExtra("keyCode", 87) })
-
-        for (intent in intents) {
-            intent.addFlags(Intent.FLAG_RECEIVER_FOREGROUND or Intent.FLAG_INCLUDE_STOPPED_PACKAGES)
-            try {
-                context.sendBroadcast(intent)
-            } catch (e: Throwable) {}
-            for (pkg in radioPackages) {
-                try {
-                    context.sendBroadcast(Intent(intent).apply { setPackage(pkg) })
-                } catch (e: Throwable) {}
-            }
-        }
 
         mainHandler.postDelayed({
             requestRadioInfoPing()
@@ -782,6 +879,14 @@ class RadioManager(private val context: Context) {
                 if (freqKHz != null) putExtra("freq_khz", freqKHz)
                 if (freq10KHz != null) putExtra("extra_freq", freq10KHz)
             })
+            intents.add(Intent("com.nwd.action.ACTION_SEND_RADIO_COMMAND").apply {
+                putExtra("command", 14) // SET_FREQ opcode in NWD MCU
+                putExtra("cmd", 14)
+                putExtra("freq", numStr)
+                if (freqDouble != null) putExtra("frequency", freqDouble)
+                if (freqKHz != null) putExtra("freq_khz", freqKHz)
+                if (freq10KHz != null) putExtra("extra_freq", freq10KHz)
+            })
             intents.add(Intent("com.nwd.radio.set_freq").apply {
                 putExtra("freq", numStr)
                 if (freqKHz != null) putExtra("freq_khz", freqKHz)
@@ -798,40 +903,65 @@ class RadioManager(private val context: Context) {
             intents.add(Intent("com.allwinner.radio.set_freq").apply {
                 putExtra("freq", numStr)
             })
+            // Deep links
+            intents.add(Intent(Intent.ACTION_VIEW, Uri.parse("radio://$numStr")))
+            intents.add(Intent(Intent.ACTION_VIEW, Uri.parse("radio://tune?freq=$numStr")))
         }
 
         // 2. Preset / Collect Index Selection Intents
-        val pNum = presetIndex + 1
-        intents.add(Intent("com.nwd.action.ACTION_SEND_RADIO_COMMAND").apply {
-            putExtra("command", "preset")
-            putExtra("cmd", "preset")
-            putExtra("preset", pNum)
-            putExtra("collect", pNum)
-            putExtra("index", presetIndex)
-        })
-        intents.add(Intent("com.nwd.action.ACTION_SEND_RADIO_COMMAND").apply {
-            putExtra("command", "collect")
-            putExtra("cmd", "collect")
-            putExtra("index", presetIndex)
-            putExtra("preset", pNum)
-        })
-        intents.add(Intent("com.nwd.radio.preset").apply {
-            putExtra("index", presetIndex)
-            putExtra("preset", pNum)
-        })
-        intents.add(Intent("com.qf.radio.action").apply {
-            putExtra("action", "select_preset")
-            putExtra("index", presetIndex)
-        })
+        if (presetIndex >= 0) {
+            val pNum = presetIndex + 1
+            intents.add(Intent("com.nwd.action.ACTION_SEND_RADIO_COMMAND").apply {
+                putExtra("command", "preset")
+                putExtra("cmd", "preset")
+                putExtra("preset", pNum)
+                putExtra("collect", pNum)
+                putExtra("index", presetIndex)
+            })
+            intents.add(Intent("com.nwd.action.ACTION_SEND_RADIO_COMMAND").apply {
+                putExtra("command", "collect")
+                putExtra("cmd", "collect")
+                putExtra("index", presetIndex)
+                putExtra("preset", pNum)
+            })
+            intents.add(Intent("com.nwd.action.ACTION_SEND_RADIO_COMMAND").apply {
+                putExtra("command", 13) // COLLECT opcode
+                putExtra("cmd", 13)
+                putExtra("preset", pNum)
+                putExtra("collect", pNum)
+                putExtra("index", presetIndex)
+            })
+            intents.add(Intent("com.nwd.radio.preset").apply {
+                putExtra("index", presetIndex)
+                putExtra("preset", pNum)
+            })
+            intents.add(Intent("com.qf.radio.action").apply {
+                putExtra("action", "select_preset")
+                putExtra("index", presetIndex)
+            })
+        }
+
+        val (dynamicReceivers, dynamicServices) = getDynamicRadioTargets()
+        val allTargetPackages = (radioPackages + dynamicReceivers.map { it.packageName } + dynamicServices.map { it.packageName }).distinct()
 
         for (intent in intents) {
             intent.addFlags(Intent.FLAG_RECEIVER_FOREGROUND or Intent.FLAG_INCLUDE_STOPPED_PACKAGES)
             try {
                 context.sendBroadcast(intent)
             } catch (e: Throwable) {}
-            for (pkg in radioPackages) {
+            for (pkg in allTargetPackages) {
                 try {
                     context.sendBroadcast(Intent(intent).apply { setPackage(pkg) })
+                } catch (e: Throwable) {}
+            }
+            for (rec in dynamicReceivers) {
+                try {
+                    context.sendBroadcast(Intent(intent).apply { component = rec })
+                } catch (e: Throwable) {}
+            }
+            for (svc in dynamicServices) {
+                try {
+                    context.startService(Intent(intent).apply { component = svc })
                 } catch (e: Throwable) {}
             }
         }

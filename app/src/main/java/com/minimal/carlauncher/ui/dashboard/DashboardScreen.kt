@@ -107,7 +107,7 @@ fun DashboardScreen(
                     date = currentDate,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .weight(0.82f)
+                        .weight(0.72f)
                 )
 
                 RadioStationWidget(
@@ -121,7 +121,7 @@ fun DashboardScreen(
                     onLaunchRadio = { viewModel.launchMusic() },
                     modifier = Modifier
                         .fillMaxWidth()
-                        .weight(1.38f)
+                        .weight(1.48f)
                 )
 
                 LeftBottomDock(
