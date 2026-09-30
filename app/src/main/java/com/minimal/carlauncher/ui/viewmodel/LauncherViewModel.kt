@@ -475,7 +475,7 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
     }
 
     fun launchMusic() {
-        val currentStation = _radioStation.value
+        val currentStation = radioStation.value
         val radioPkgs = listOf(
             "com.nwd.radio",
             "com.nwd.link.radio",
