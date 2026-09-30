@@ -77,7 +77,35 @@
                 <action android:name="com.softwinner.radio.REPORT" />
                 <action android:name="com.nwd.action.ACTION_SEND_RADIO_FREQUENCE_NEW" />
                 <action android:name="ACTION_SEND_RADIO_FREQUENCE_NEW" />
+                <action android:name="com.nwd.radio.freq_action" />
+                <action android:name="com.nwd.radio.change" />
+                <action android:name="com.nwd.radio.status" />
+                <action android:name="com.nwd.radio.update_action" />
+                <action android:name="com.nwd.action.ACTION_RADIO_INFO" />
+                <action android:name="com.nwd.action.ACTION_RADIO_STATE" />
+                <action android:name="com.nwd.action.RADIO_STATUS_CHANGED" />
+                <action android:name="com.nwd.action.ACTION_SEND_RADIO_INFO" />
+                <action android:name="com.nwd.action.RADIO_INFO" />
+                <action android:name="com.nwd.action.RADIO_FREQUENCE" />
+                <action android:name="com.nwd.action.RADIO_STATUS" />
                 <action android:name="com.nwd.radio.REPORT" />
+                <action android:name="com.nwd.radio" />
+                <action android:name="com.nwd.link.radio.freq" />
+                <action android:name="com.nwd.link.radio" />
+                <action android:name="com.nwd.radio.broadcast" />
+                <action android:name="com.nwd.radio.CURRENT_FREQ" />
+                <action android:name="nwd.radio.cur_freq" />
+                <action android:name="com.nwd.ACTION_CHANGE_SOURCE" />
+                <action android:name="com.nwd.mcu.radio" />
+                <action android:name="com.nwd.kernel.radio" />
+                <action android:name="com.nwd.broadcast.RADIO" />
+                <action android:name="com.nwd.radio.ACTION_SEND_RADIO_INFO" />
+                <action android:name="com.nwd.radio.ACTION_RADIO_FREQ_CHANGED" />
+                <action android:name="com.nwd.radio.FREQ_CHANGED" />
+                <action android:name="com.nwd.radio.action.STATION_CHANGED" />
+                <action android:name="com.nwd.radio.station_changed" />
+                <action android:name="com.android.radio.freq" />
+                <action android:name="com.android.radio.frequence" />
                 <action android:name="com.microntek.radiostate" />
                 <action android:name="com.microntek.radio.report" />
                 <action android:name="com.syu.radio" />
@@ -89,6 +117,7 @@
                 <action android:name="android.intent.action.RADIO_STATE_CHANGED" />
                 <action android:name="android.hardware.radio.action.STATION_CHANGED" />
                 <action android:name="com.android.fmradio.FM_FREQUENCY_CHANGED" />
+                <action android:name="com.android.fmradio.FM_ENABLED" />
             </intent-filter>
         </receiver>
 

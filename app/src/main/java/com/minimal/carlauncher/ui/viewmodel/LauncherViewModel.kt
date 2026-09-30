@@ -475,10 +475,29 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
     }
 
     fun launchMusic() {
+        val currentStation = _radioStation.value
+        val radioPkgs = listOf(
+            "com.nwd.radio",
+            "com.nwd.link.radio",
+            "com.android.fmradio",
+            "com.allwinner.radio",
+            "com.qf.radio",
+            "com.navimods.radio"
+        )
+        // If radio station is active, prioritize launching native headunit radio app
+        if (!currentStation.isNullOrBlank()) {
+            for (pkg in radioPkgs) {
+                if (repository.launchPackage(pkg)) return
+            }
+        }
+
         val music = _musicApp.value
         if (music != null) {
             repository.launchApp(music)
         } else {
+            for (pkg in radioPkgs) {
+                if (repository.launchPackage(pkg)) return
+            }
             if (!repository.launchPackage("com.spotify.music")) {
                 openAppDrawer()
             }
@@ -505,6 +524,7 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
 
     fun refreshRadio() {
         radioManager.readCurrentSettingsFrequency()
+        radioManager.requestRadioInfoPing()
     }
 
     override fun onCleared() {

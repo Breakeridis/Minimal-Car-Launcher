@@ -136,25 +136,26 @@ private class VehicleMarkerOverlay(private val density: Float) : Overlay() {
         canvas.translate(screenPoint.x.toFloat(), screenPoint.y.toFloat())
         canvas.rotate(-mapView.mapOrientation)
 
-        val radius = 20f * density
+        val radius = 30f * density
+        borderPaint.strokeWidth = 3.5f * density
         canvas.drawCircle(0f, 0f, radius, badgePaint)
         canvas.drawCircle(0f, 0f, radius, borderPaint)
 
         // Automotive Chevron Arrow pointing straight UP (12 o'clock)
         arrowPath.reset()
-        arrowPath.moveTo(0f, -12f * density)
-        arrowPath.lineTo(9f * density, 8f * density)
-        arrowPath.lineTo(0f, 4f * density)
-        arrowPath.lineTo(-9f * density, 8f * density)
+        arrowPath.moveTo(0f, -19f * density)
+        arrowPath.lineTo(14f * density, 12f * density)
+        arrowPath.lineTo(0f, 6f * density)
+        arrowPath.lineTo(-14f * density, 12f * density)
         arrowPath.close()
         canvas.drawPath(arrowPath, arrowPaint)
 
         // Inner white core for sharp visual definition
         corePath.reset()
-        corePath.moveTo(0f, -8f * density)
-        corePath.lineTo(5f * density, 5f * density)
-        corePath.lineTo(0f, 2.5f * density)
-        corePath.lineTo(-5f * density, 5f * density)
+        corePath.moveTo(0f, -13f * density)
+        corePath.lineTo(8f * density, 8f * density)
+        corePath.lineTo(0f, 4f * density)
+        corePath.lineTo(-8f * density, 8f * density)
         corePath.close()
         canvas.drawPath(corePath, arrowCorePaint)
 
@@ -182,7 +183,7 @@ private class DestinationMarkerOverlay(private val density: Float) : Overlay() {
 
     private val pinBorderPaint = AndroidPaint(AndroidPaint.ANTI_ALIAS_FLAG).apply {
         style = AndroidPaint.Style.STROKE
-        strokeWidth = 2f * density
+        strokeWidth = 3f * density
         color = android.graphics.Color.WHITE
     }
 
@@ -206,13 +207,13 @@ private class DestinationMarkerOverlay(private val density: Float) : Overlay() {
 
         // Ground drop-shadow beneath the pin
         canvas.drawOval(
-            -7f * density, -2.5f * density,
-            7f * density, 2.5f * density,
+            -11f * density, -4f * density,
+            11f * density, 4f * density,
             shadowPaint
         )
 
-        val headCenterY = -24f * density
-        val headRadius = 10f * density
+        val headCenterY = -38f * density
+        val headRadius = 16f * density
 
         pinPath.reset()
         pinPath.moveTo(0f, 0f)
@@ -227,7 +228,7 @@ private class DestinationMarkerOverlay(private val density: Float) : Overlay() {
 
         canvas.drawPath(pinPath, pinBodyPaint)
         canvas.drawPath(pinPath, pinBorderPaint)
-        canvas.drawCircle(0f, headCenterY, 3.8f * density, pinCorePaint)
+        canvas.drawCircle(0f, headCenterY, 6f * density, pinCorePaint)
 
         canvas.restore()
     }
@@ -573,20 +574,20 @@ fun CircularMapPortal(
                 modifier = Modifier.fillMaxSize()
             )
 
-            // Floating Map Controls (Search, Recenter) - Zoom in/out handled naturally via 2-finger pinch
+            // Floating Map Controls (Search, Recenter) - Doubled size for effortless in-cockpit touch
             Column(
                 modifier = Modifier
                     .align(Alignment.CenterEnd)
-                    .padding(end = 12.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
+                    .padding(end = 14.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp)
             ) {
-                // Search Address Autocomplete
+                // Search Address Autocomplete (Doubled size: 62dp button, 38dp icon)
                 Box(
                     modifier = Modifier
-                        .size(38.dp)
+                        .size(62.dp)
                         .clip(CircleShape)
-                        .background(CarSurface.copy(alpha = 0.88f))
-                        .border(1.dp, CarBorder.copy(alpha = 0.6f), CircleShape)
+                        .background(CarSurface.copy(alpha = 0.90f))
+                        .border(1.5.dp, CarBorder.copy(alpha = 0.7f), CircleShape)
                         .clickable { onOpenSearch() },
                     contentAlignment = Alignment.Center
                 ) {
@@ -594,19 +595,19 @@ fun CircularMapPortal(
                         imageVector = Icons.Default.Search,
                         contentDescription = "Search Address",
                         tint = AccentCyan,
-                        modifier = Modifier.size(19.dp)
+                        modifier = Modifier.size(38.dp)
                     )
                 }
 
-                // Recenter GPS
+                // Recenter GPS (Doubled size: 62dp button, 38dp icon)
                 Box(
                     modifier = Modifier
-                        .size(38.dp)
+                        .size(62.dp)
                         .clip(CircleShape)
-                        .background(CarSurface.copy(alpha = 0.88f))
+                        .background(CarSurface.copy(alpha = 0.90f))
                         .border(
-                            1.dp,
-                            if (isUserPanning) AccentAmber.copy(alpha = 0.8f) else CarBorder.copy(alpha = 0.6f),
+                            1.5.dp,
+                            if (isUserPanning) AccentAmber.copy(alpha = 0.85f) else CarBorder.copy(alpha = 0.7f),
                             CircleShape
                         )
                         .clickable {
@@ -621,7 +622,7 @@ fun CircularMapPortal(
                         imageVector = Icons.Default.GpsFixed,
                         contentDescription = "Recenter",
                         tint = if (isUserPanning) AccentAmber else if (isGpsActive) AccentGreen else AccentAmber,
-                        modifier = Modifier.size(19.dp)
+                        modifier = Modifier.size(38.dp)
                     )
                 }
             }
@@ -633,23 +634,23 @@ fun CircularMapPortal(
                         modifier = Modifier
                             .align(Alignment.BottomCenter)
                             .padding(bottom = 12.dp)
-                            .clip(RoundedCornerShape(12.dp))
+                            .clip(RoundedCornerShape(14.dp))
                             .background(CarSurface.copy(alpha = 0.95f))
-                            .border(1.dp, AccentCyan, RoundedCornerShape(12.dp))
-                            .padding(horizontal = 14.dp, vertical = 7.dp)
+                            .border(1.5.dp, AccentCyan, RoundedCornerShape(14.dp))
+                            .padding(horizontal = 16.dp, vertical = 9.dp)
                     ) {
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
                             androidx.compose.material3.CircularProgressIndicator(
-                                modifier = Modifier.size(13.dp),
+                                modifier = Modifier.size(18.dp),
                                 color = AccentCyan,
-                                strokeWidth = 2.dp
+                                strokeWidth = 2.5.dp
                             )
                             Text(
                                 text = "CALCULATING ROUTE...",
-                                fontSize = 11.sp,
+                                fontSize = 12.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = AccentCyan,
                                 letterSpacing = 0.5.sp
@@ -673,30 +674,30 @@ fun CircularMapPortal(
                         modifier = Modifier
                             .align(Alignment.BottomCenter)
                             .padding(bottom = 12.dp),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         // Route Telemetry (Distance & ETA)
                         Box(
                             modifier = Modifier
-                                .clip(RoundedCornerShape(12.dp))
+                                .clip(RoundedCornerShape(14.dp))
                                 .background(CarSurface.copy(alpha = 0.94f))
-                                .border(1.dp, AccentGreen.copy(alpha = 0.5f), RoundedCornerShape(12.dp))
-                                .padding(horizontal = 12.dp, vertical = 7.dp)
+                                .border(1.5.dp, AccentGreen.copy(alpha = 0.6f), RoundedCornerShape(14.dp))
+                                .padding(horizontal = 14.dp, vertical = 9.dp)
                         ) {
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
                                 Box(
                                     modifier = Modifier
-                                        .size(7.dp)
+                                        .size(11.dp)
                                         .clip(CircleShape)
                                         .background(AccentGreen)
                                 )
                                 Text(
                                     text = "$distText • $timeText",
-                                    fontSize = 11.sp,
+                                    fontSize = 13.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = AccentGreen,
                                     letterSpacing = 0.5.sp
@@ -704,27 +705,27 @@ fun CircularMapPortal(
                             }
                         }
 
-                        // Stop Navigation Button
+                        // Stop Navigation Button (Doubled icon size: 24dp)
                         Box(
                             modifier = Modifier
-                                .clip(RoundedCornerShape(12.dp))
+                                .clip(RoundedCornerShape(14.dp))
                                 .background(AccentRed)
                                 .clickable { onStopNavigation() }
-                                .padding(horizontal = 12.dp, vertical = 7.dp)
+                                .padding(horizontal = 16.dp, vertical = 9.dp)
                         ) {
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.Close,
                                     contentDescription = "Stop Navigation",
                                     tint = Color.White,
-                                    modifier = Modifier.size(14.dp)
+                                    modifier = Modifier.size(24.dp)
                                 )
                                 Text(
                                     text = "STOP",
-                                    fontSize = 11.sp,
+                                    fontSize = 13.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = Color.White,
                                     letterSpacing = 0.5.sp
@@ -740,30 +741,30 @@ fun CircularMapPortal(
                         modifier = Modifier
                             .align(Alignment.BottomCenter)
                             .padding(bottom = 12.dp),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        // Start Navigation Button
+                        // Start Navigation Button (Doubled icon size: 26dp)
                         Box(
                             modifier = Modifier
-                                .clip(RoundedCornerShape(12.dp))
+                                .clip(RoundedCornerShape(14.dp))
                                 .background(AccentGreen)
                                 .clickable { onStartNavigation(dest) }
-                                .padding(horizontal = 14.dp, vertical = 7.dp)
+                                .padding(horizontal = 18.dp, vertical = 10.dp)
                         ) {
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.Navigation,
                                     contentDescription = "Start Navigation",
                                     tint = Color.Black,
-                                    modifier = Modifier.size(15.dp)
+                                    modifier = Modifier.size(26.dp)
                                 )
                                 Text(
                                     text = "START NAVIGATION",
-                                    fontSize = 11.sp,
+                                    fontSize = 13.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = Color.Black,
                                     letterSpacing = 0.5.sp
@@ -771,13 +772,13 @@ fun CircularMapPortal(
                             }
                         }
 
-                        // Clear Pin Button
+                        // Clear Pin Button (Doubled size: 52dp button, 28dp icon)
                         Box(
                             modifier = Modifier
-                                .size(32.dp)
+                                .size(52.dp)
                                 .clip(CircleShape)
                                 .background(CarSurface.copy(alpha = 0.95f))
-                                .border(1.dp, CarBorder, CircleShape)
+                                .border(1.5.dp, CarBorder, CircleShape)
                                 .clickable {
                                     selectedDestination = null
                                     destinationOverlayRef?.location = null
@@ -789,7 +790,7 @@ fun CircularMapPortal(
                                 imageVector = Icons.Default.Close,
                                 contentDescription = "Clear Pin",
                                 tint = TextSecondary,
-                                modifier = Modifier.size(16.dp)
+                                modifier = Modifier.size(28.dp)
                             )
                         }
                     }
@@ -800,23 +801,23 @@ fun CircularMapPortal(
                         modifier = Modifier
                             .align(Alignment.BottomCenter)
                             .padding(bottom = 12.dp)
-                            .clip(RoundedCornerShape(12.dp))
+                            .clip(RoundedCornerShape(14.dp))
                             .background(CarSurface.copy(alpha = 0.92f))
-                            .border(1.dp, CarBorder, RoundedCornerShape(12.dp))
+                            .border(1.5.dp, CarBorder, RoundedCornerShape(14.dp))
                             .clickable { onOpenNavigation() }
-                            .padding(horizontal = 14.dp, vertical = 6.dp)
+                            .padding(horizontal = 16.dp, vertical = 8.dp)
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Box(
                                 modifier = Modifier
-                                    .size(7.dp)
+                                    .size(10.dp)
                                     .clip(CircleShape)
                                     .background(if (isGpsActive) AccentGreen else AccentAmber)
                             )
-                            Spacer(modifier = Modifier.width(6.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
                             Text(
                                 text = "TAP FOR FULL MAP",
-                                fontSize = 10.sp,
+                                fontSize = 12.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = TextSecondary,
                                 letterSpacing = 0.5.sp

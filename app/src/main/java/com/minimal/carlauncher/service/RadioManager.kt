@@ -74,19 +74,34 @@ class RadioManager(private val context: Context) {
         "com.allwinner.radio.cur_freq",
         "com.allwinner.radio.station",
 
-        // Nowada (NWD)
+        // Nowada (NWD / K2401P / Allwinner T507 / A133)
         "nwd_radio_current_freq",
         "nwd_radio_freq",
         "nwd_radio_name",
+        "nwd_radio_station",
         "nwd_radio_band",
+        "nwd_radio_channel",
         "nwd_freq",
         "nwd_cur_freq",
+        "nwd_station",
+        "Radio_Freq",
+        "Radio_Current_Freq",
+        "Radio_Band",
+        "Radio_Channel",
+        "Radio_Name",
+        "Radio_Status",
+        "RADIO_FREQ",
+        "RADIO_CURRENT_FREQ",
+        "RADIO_BAND",
+        "RADIO_CHANNEL",
+        "RADIO_NAME",
 
         // Generic Automotive & MCU
         "radio_cur_freq",
         "radio_freq",
         "cur_freq",
         "curfreq",
+        "cur_frequency",
         "radio_current_freq",
         "radio_frequency",
         "radio_station",
@@ -102,10 +117,6 @@ class RadioManager(private val context: Context) {
         "curRadioFreq",
         "currentRadioFreq",
         "current_radio_freq",
-        "Radio_Freq",
-        "RADIO_FREQ",
-        "Radio_Current_Freq",
-        "RADIO_CURRENT_FREQ",
         "mcu_radio_freq",
         "mcu_radio_cur_freq",
         "mcu_freq",
@@ -126,7 +137,16 @@ class RadioManager(private val context: Context) {
     )
 
     private val systemPropertyKeys = listOf(
+        "persist.nwd.radio.freq",
+        "persist.nwd.cur_freq",
+        "persist.nwd.radio.band",
+        "persist.nwd.radio.name",
+        "nwd.radio.freq",
+        "nwd.radio.cur_freq",
+        "sys.nwd.radio.freq",
+        "sys.nwd.freq",
         "persist.sys.radio.freq",
+        "persist.sys.radio.cur_freq",
         "persist.radio.freq",
         "persist.radio.cur_freq",
         "sys.radio.freq",
@@ -136,9 +156,6 @@ class RadioManager(private val context: Context) {
         "qf.radio.cur_freq",
         "persist.qf.radio.freq",
         "persist.qf.cur_freq",
-        "nwd.radio.freq",
-        "persist.nwd.radio.freq",
-        "persist.sys.radio.cur_freq",
         "allwinner.radio.freq",
         "persist.allwinner.radio.freq",
         "radio.freq",
@@ -177,12 +194,16 @@ class RadioManager(private val context: Context) {
         // 3. Register BroadcastReceiver for vendor events
         registerBroadcastReceiver()
 
-        // 4. Background polling loop every 2.5s for continuous sync
+        // 4. Request initial radio info broadcast from MCU daemon
+        requestRadioInfoPing()
+
+        // 5. Background polling loop every 2.5s for continuous sync
         pollingJob?.cancel()
         pollingJob = CoroutineScope(Dispatchers.IO).launch {
             while (isMonitoring) {
                 delay(2500L)
                 readCurrentSettingsFrequency()
+                requestRadioInfoPing()
             }
         }
     }
@@ -221,14 +242,11 @@ class RadioManager(private val context: Context) {
             var nameVal: String? = null
             var bandVal: String? = null
 
-            // Check if radio power is explicitly reported off
-            val powerStateKeys = listOf(
-                "qf_radio_power", "radio_power", "radio_state", "qf_radio_state",
-                "radio_play", "radio_play_state", "nwd_radio_state"
-            )
-            for (pk in powerStateKeys) {
+            // Check if radio power is explicitly reported off (never check ambiguous state keys like "state" or "radio_state" where 0 = FM1)
+            val powerKeys = listOf("qf_radio_power", "radio_power", "nwd_radio_power")
+            for (pk in powerKeys) {
                 val p = Settings.System.getString(resolver, pk)
-                if (p == "0" || p.equals("false", ignoreCase = true) || p.equals("off", ignoreCase = true)) {
+                if (p.equals("false", ignoreCase = true) || p.equals("off", ignoreCase = true)) {
                     _isRadioActive.value = false
                     _radioStation.value = null
                     return
@@ -307,12 +325,24 @@ class RadioManager(private val context: Context) {
                 }
             }
 
+            // 6. Fallback: Query automotive radio ContentProviders (e.g. com.nwd.radio)
+            if (freqVal.isNullOrBlank()) {
+                val providerResult = scanContentProviders()
+                if (providerResult != null) {
+                    freqVal = providerResult.first
+                    if (nameVal.isNullOrBlank()) nameVal = providerResult.second
+                    if (bandVal.isNullOrBlank()) bandVal = providerResult.third
+                }
+            }
+
             // Read Station Name
             if (nameVal.isNullOrBlank()) {
                 val nameKeys = listOf(
+                    "nwd_radio_name", "nwd_radio_station", "nwd_station",
+                    "Radio_Name", "RADIO_NAME",
                     "qf_radio_name", "qf_radio_station", "qf_station", "qf_name",
                     "allwinner_radio_station", "allwinner_radio_name",
-                    "nwd_radio_name", "radio_name", "radio_station", "radio_station_name",
+                    "radio_name", "radio_station", "radio_station_name",
                     "radio_ps", "radio_rds", "radio_rt"
                 )
                 for (nk in nameKeys) {
@@ -329,7 +359,7 @@ class RadioManager(private val context: Context) {
 
             // Read Band
             if (bandVal.isNullOrBlank()) {
-                val bandKeys = listOf("qf_radio_band", "nwd_radio_band", "radio_band", "qf_band")
+                val bandKeys = listOf("nwd_radio_band", "Radio_Band", "RADIO_BAND", "qf_radio_band", "radio_band", "qf_band")
                 for (bk in bandKeys) {
                     val bv = Settings.System.getString(resolver, bk)
                         ?: Settings.Global.getString(resolver, bk)
@@ -458,6 +488,80 @@ class RadioManager(private val context: Context) {
         }
     }
 
+    private fun scanContentProviders(): Triple<String, String?, String?>? {
+        val candidateUris = listOf(
+            "content://com.nwd.radio/info",
+            "content://com.nwd.radio.provider/status",
+            "content://com.nwd.radio/status",
+            "content://com.nwd.radio/cur_freq",
+            "content://com.qf.radio/info",
+            "content://com.allwinner.radio/info"
+        )
+        for (uriStr in candidateUris) {
+            try {
+                val uri = Uri.parse(uriStr)
+                context.contentResolver.query(uri, null, null, null, null)?.use { cursor ->
+                    if (cursor.moveToFirst()) {
+                        var foundFreq: String? = null
+                        var foundName: String? = null
+                        var foundBand: String? = null
+                        for (i in 0 until cursor.columnCount) {
+                            val colName = cursor.getColumnName(i).lowercase()
+                            val colVal = cursor.getString(i) ?: continue
+                            if (colVal.isBlank() || BLACKLISTED_TOKENS.any { colVal.lowercase().contains(it) }) continue
+
+                            if (foundFreq == null && (colName.contains("freq") || colName.contains("channel"))) {
+                                if (formatFrequency(colVal, null, null) != null) {
+                                    foundFreq = colVal
+                                }
+                            }
+                            if (foundName == null && (colName.contains("name") || colName.contains("station") || colName.contains("ps"))) {
+                                if (colVal.length in 2..40) {
+                                    foundName = colVal.trim()
+                                }
+                            }
+                            if (foundBand == null && colName.contains("band")) {
+                                foundBand = colVal.trim()
+                            }
+                        }
+                        if (foundFreq != null) {
+                            return Triple(foundFreq, foundName, foundBand)
+                        }
+                    }
+                }
+            } catch (e: Throwable) {
+                // Ignore providers not present or lacking permissions
+            }
+        }
+        return null
+    }
+
+    /**
+     * Actively broadcasts a status request to NWD, QF, Allwinner and MCU daemons to prompt
+     * an immediate state broadcast update back to the launcher.
+     */
+    fun requestRadioInfoPing() {
+        val pingActions = listOf(
+            "com.nwd.action.ACTION_SEND_RADIO_INFO",
+            "com.nwd.radio.req_info",
+            "com.nwd.action.REQ_RADIO_INFO",
+            "com.nwd.radio.update_action",
+            "com.nwd.radio.status",
+            "com.qf.action.RADIO_INFO",
+            "com.qf.radio.action",
+            "com.allwinner.radio.REQ_INFO",
+            "com.allwinner.action.RADIO_INFO",
+            "com.microntek.sync"
+        )
+        for (act in pingActions) {
+            try {
+                context.sendBroadcast(Intent(act))
+            } catch (e: Throwable) {
+                // Ignore
+            }
+        }
+    }
+
     private fun registerSettingsObservers() {
         val resolver = context.contentResolver
 
@@ -487,6 +591,39 @@ class RadioManager(private val context: Context) {
 
     private fun registerBroadcastReceiver() {
         val filter = IntentFilter().apply {
+            // Nowada (NWD / K2401P / Allwinner T507 / A133)
+            addAction("com.nwd.action.ACTION_SEND_RADIO_FREQUENCE_NEW")
+            addAction("ACTION_SEND_RADIO_FREQUENCE_NEW")
+            addAction("com.nwd.radio.freq_action")
+            addAction("com.nwd.radio.change")
+            addAction("com.nwd.radio.status")
+            addAction("com.nwd.radio.update_action")
+            addAction("com.nwd.action.ACTION_RADIO_INFO")
+            addAction("com.nwd.action.ACTION_RADIO_STATE")
+            addAction("com.nwd.action.RADIO_STATUS_CHANGED")
+            addAction("com.nwd.action.ACTION_SEND_RADIO_INFO")
+            addAction("com.nwd.action.RADIO_INFO")
+            addAction("com.nwd.action.RADIO_FREQUENCE")
+            addAction("com.nwd.action.RADIO_STATUS")
+            addAction("com.nwd.radio.REPORT")
+            addAction("com.nwd.radio")
+            addAction("com.nwd.link.radio.freq")
+            addAction("com.nwd.link.radio")
+            addAction("com.nwd.radio.broadcast")
+            addAction("com.nwd.radio.CURRENT_FREQ")
+            addAction("nwd.radio.cur_freq")
+            addAction("com.nwd.ACTION_CHANGE_SOURCE")
+            addAction("com.nwd.mcu.radio")
+            addAction("com.nwd.kernel.radio")
+            addAction("com.nwd.broadcast.RADIO")
+            addAction("com.nwd.radio.ACTION_SEND_RADIO_INFO")
+            addAction("com.nwd.radio.ACTION_RADIO_FREQ_CHANGED")
+            addAction("com.nwd.radio.FREQ_CHANGED")
+            addAction("com.nwd.radio.action.STATION_CHANGED")
+            addAction("com.nwd.radio.station_changed")
+            addAction("com.android.radio.freq")
+            addAction("com.android.radio.frequence")
+
             // QuickFish (QF / K2401 / K706 / ROCO)
             addAction("com.qf.radio.update_action")
             addAction("com.qf.action.RADIO")
@@ -497,16 +634,6 @@ class RadioManager(private val context: Context) {
             addAction("com.qf.radio.REPORT")
             addAction("com.qf.radio.action")
             addAction("com.qf.action.ACC_ON")
-
-            // Nowada (NWD)
-            addAction("com.nwd.action.ACTION_SEND_RADIO_FREQUENCE_NEW")
-            addAction("ACTION_SEND_RADIO_FREQUENCE_NEW")
-            addAction("com.nwd.radio.REPORT")
-            addAction("com.nwd.ACTION_CHANGE_SOURCE")
-            addAction("com.nwd.action.ACTION_RADIO_INFO")
-            addAction("com.nwd.action.ACTION_RADIO_STATE")
-            addAction("com.nwd.action.ACTION_SEND_RADIO_INFO")
-            addAction("com.nwd.radio")
 
             // Allwinner / Softwinner
             addAction("com.allwinner.radio.station_changed")
@@ -566,11 +693,11 @@ class RadioManager(private val context: Context) {
 
     private fun checkIntentRadioOff(intent: Intent): Boolean {
         val extras = intent.extras ?: return false
-        val stateKeys = listOf("state", "play", "isPlay", "isPlaying", "power", "enable")
-        for (k in stateKeys) {
+        val powerKeys = listOf("radio_power", "qf_radio_power", "nwd_radio_power", "is_power_on")
+        for (k in powerKeys) {
             if (extras.containsKey(k)) {
                 val v = extras.get(k)
-                if (v == false || v == 0 || v == "0" || v == "false" || v == "off") {
+                if (v == false || v == "false" || v == "off") {
                     return true
                 }
             }
@@ -579,13 +706,25 @@ class RadioManager(private val context: Context) {
     }
 
     fun extractFromIntent(intent: Intent) {
-        val action = intent.action ?: ""
-        val lowerAction = action.lowercase()
-        if (BLACKLISTED_TOKENS.any { lowerAction.contains(it) }) return
+        val extras = intent.extras
 
-        val extras = intent.extras ?: return
+        // Support intent.data or dataString if URI encodes frequency (e.g. radio://... or content://...)
+        val dataStr = intent.dataString
+        if (dataStr != null) {
+            val formattedData = formatFrequency(dataStr, null, null)
+            if (formattedData != null) {
+                _radioStation.value = formattedData
+                _isRadioActive.value = true
+                return
+            }
+        }
 
-        // Check if intent signals radio turned off
+        if (extras == null) {
+            readCurrentSettingsFrequency()
+            return
+        }
+
+        // Check if intent explicitly signals radio turned off
         if (checkIntentRadioOff(intent)) {
             _isRadioActive.value = false
             _radioStation.value = null
@@ -596,87 +735,127 @@ class RadioManager(private val context: Context) {
         var detectedName: String? = null
         var detectedBand: String? = null
 
-        // 1. Check known frequency extra keys
+        // Collect primary extras bundle and any nested bundles
+        val candidateBundles = mutableListOf(extras)
+        for (k in extras.keySet()) {
+            try {
+                val nested = extras.getBundle(k)
+                if (nested != null) candidateBundles.add(nested)
+            } catch (e: Throwable) {
+                // Ignore
+            }
+        }
+
+        // 1. Check known frequency extra keys across bundles
         val freqKeys = listOf(
-            "extra_radio_frequence", "freq", "frequency", "cur_freq", "current_freq",
-            "radio:freq", "radio_freq", "qf_freq", "qf_radio_freq", "curRadioFreq",
-            "currentRadioFreq", "channel", "frequence", "radio_frequence", "nwd_freq",
-            "mFreq", "station_freq", "play_freq", "tuner_freq",
-            "EXTRA_RADIO_FREQUENCY", "EXTRA_FREQUENCY", "FREQ", "CUR_FREQ"
+            "extra_radio_frequence", "extra_radio_freq", "extra_freq", "cur_freq",
+            "curfreq", "cur_frequency", "current_freq", "curRadioFreq", "currentRadioFreq",
+            "nwd_freq", "nwd_radio_freq", "frequency", "freq", "channel",
+            "radio:freq", "radio_freq", "qf_freq", "qf_radio_freq", "frequence",
+            "radio_frequence", "mFreq", "station_freq", "play_freq", "tuner_freq",
+            "RadioFreq", "RADIO_FREQ", "Radio_Freq", "freq_kHz", "freq_MHz",
+            "cur_freq_khz", "freq_int", "EXTRA_RADIO_FREQUENCY", "EXTRA_FREQUENCY",
+            "FREQ", "CUR_FREQ"
         )
-        for (k in freqKeys) {
-            if (extras.containsKey(k)) {
-                val v = extras.get(k) ?: continue
-                val formatted = formatFrequency(v, null, null)
-                if (formatted != null) {
-                    detectedFreq = v
-                    break
-                }
-            }
-        }
-
-        // 2. Check known station name extra keys
-        val nameKeys = listOf(
-            "extra_radio_name", "name", "station", "ps", "radio:name", "rds",
-            "station_name", "title", "track", "label", "qf_station", "qf_name",
-            "rds_ps", "rds_name", "radio_ps", "radio_name", "EXTRA_STATION_NAME"
-        )
-        for (k in nameKeys) {
-            if (extras.containsKey(k)) {
-                val v = extras.get(k)?.toString()?.trim()
-                if (!v.isNullOrBlank() && !v.equals("null", ignoreCase = true) && v.length in 2..40) {
-                    if (BLACKLISTED_TOKENS.none { v.lowercase().contains(it) }) {
-                        detectedName = v
-                        break
-                    }
-                }
-            }
-        }
-
-        // 3. Check known band extra keys
-        val bandKeys = listOf("extra_radio_band", "band", "radio:band", "type", "qf_band", "EXTRA_RADIO_BAND")
-        for (k in bandKeys) {
-            if (extras.containsKey(k)) {
-                val v = extras.get(k)?.toString()?.trim()
-                if (!v.isNullOrBlank()) {
-                    detectedBand = v
-                    break
-                }
-            }
-        }
-
-        // 4. Fallback: Scan all keys in the Bundle for any valid radio frequency value or array
-        if (detectedFreq == null) {
-            for (key in extras.keySet()) {
-                val lowerKey = key.lowercase()
-                if (BLACKLISTED_TOKENS.any { lowerKey.contains(it) }) continue
-
-                val v = extras.get(key) ?: continue
-
-                // Check IntArray or LongArray (common in MCU payloads)
-                if (v is IntArray) {
-                    for (intVal in v) {
-                        if (formatFrequency(intVal, detectedBand, null) != null) {
-                            detectedFreq = intVal
-                            break
-                        }
-                    }
-                    if (detectedFreq != null) break
-                } else if (v is LongArray) {
-                    for (longVal in v) {
-                        if (formatFrequency(longVal, detectedBand, null) != null) {
-                            detectedFreq = longVal
-                            break
-                        }
-                    }
-                    if (detectedFreq != null) break
-                } else {
-                    val formatted = formatFrequency(v, detectedBand, null)
+        for (b in candidateBundles) {
+            for (k in freqKeys) {
+                if (b.containsKey(k)) {
+                    val v = b.get(k) ?: continue
+                    val formatted = formatFrequency(v, null, null)
                     if (formatted != null) {
                         detectedFreq = v
                         break
                     }
                 }
+            }
+            if (detectedFreq != null) break
+        }
+
+        // 2. Check known station name extra keys across bundles
+        val nameKeys = listOf(
+            "extra_radio_name", "name", "station", "ps", "radio:name", "rds",
+            "station_name", "title", "track", "label", "qf_station", "qf_name",
+            "rds_ps", "rds_name", "radio_ps", "radio_name", "ps_name", "cur_station",
+            "nwd_station", "program_service", "EXTRA_STATION_NAME", "STATION_NAME", "RADIO_NAME"
+        )
+        for (b in candidateBundles) {
+            for (k in nameKeys) {
+                if (b.containsKey(k)) {
+                    val v = b.get(k)?.toString()?.trim()
+                    if (!v.isNullOrBlank() && !v.equals("null", ignoreCase = true) && v.length in 2..40) {
+                        if (BLACKLISTED_TOKENS.none { v.lowercase().contains(it) }) {
+                            detectedName = v
+                            break
+                        }
+                    }
+                }
+            }
+            if (detectedName != null) break
+        }
+
+        // 3. Check known band extra keys across bundles
+        val bandKeys = listOf("extra_radio_band", "band", "radio:band", "type", "cur_band", "nwd_band", "qf_band", "EXTRA_RADIO_BAND", "BAND", "RADIO_BAND")
+        for (b in candidateBundles) {
+            for (k in bandKeys) {
+                if (b.containsKey(k)) {
+                    val v = b.get(k)?.toString()?.trim()
+                    if (!v.isNullOrBlank()) {
+                        detectedBand = v
+                        break
+                    }
+                }
+            }
+            if (detectedBand != null) break
+        }
+
+        // 4. Fallback: Scan all keys in the Bundle for any valid radio frequency value or array
+        if (detectedFreq == null) {
+            for (b in candidateBundles) {
+                for (key in b.keySet()) {
+                    val lowerKey = key.lowercase()
+                    if (BLACKLISTED_TOKENS.any { lowerKey.contains(it) }) continue
+
+                    val v = b.get(key) ?: continue
+
+                    // Check IntArray or LongArray (common in MCU payloads)
+                    if (v is IntArray) {
+                        for (intVal in v) {
+                            if (formatFrequency(intVal, detectedBand, null) != null) {
+                                detectedFreq = intVal
+                                break
+                            }
+                        }
+                        if (detectedFreq != null) break
+                    } else if (v is LongArray) {
+                        for (longVal in v) {
+                            if (formatFrequency(longVal, detectedBand, null) != null) {
+                                detectedFreq = longVal
+                                break
+                            }
+                        }
+                        if (detectedFreq != null) break
+                    } else if (v is ShortArray) {
+                        for (shortVal in v) {
+                            if (formatFrequency(shortVal, detectedBand, null) != null) {
+                                detectedFreq = shortVal
+                                break
+                            }
+                        }
+                        if (detectedFreq != null) break
+                    } else if (v is ByteArray) {
+                        if (formatFrequency(v, detectedBand, null) != null) {
+                            detectedFreq = v
+                            break
+                        }
+                    } else {
+                        val formatted = formatFrequency(v, detectedBand, null)
+                        if (formatted != null) {
+                            detectedFreq = v
+                            break
+                        }
+                    }
+                }
+                if (detectedFreq != null) break
             }
         }
 
@@ -722,6 +901,26 @@ class RadioManager(private val context: Context) {
                 is Double -> if (rawFreq % 1.0 == 0.0) rawFreq.toLong().toString() else rawFreq.toString()
                 is Float -> if (rawFreq % 1.0f == 0.0f) rawFreq.toLong().toString() else rawFreq.toString()
                 is Number -> rawFreq.toLong().toString()
+                is ByteArray -> {
+                    // Try parsing as UTF-8 string first
+                    val text = try { String(rawFreq, Charsets.UTF_8).trim() } catch (e: Throwable) { null }
+                    if (text != null && text.length in 2..12 && text.any { it.isDigit() }) {
+                        text
+                    } else if (rawFreq.size >= 2) {
+                        // Try 16-bit LE / BE integers (standard MCU FF01 frequency registers)
+                        val le = (rawFreq[0].toInt() and 0xFF) or ((rawFreq[1].toInt() and 0xFF) shl 8)
+                        val be = ((rawFreq[0].toInt() and 0xFF) shl 8) or (rawFreq[1].toInt() and 0xFF)
+                        if (le in 6500..11500 || le in 520..1750 || le in 65000..115000) {
+                            le.toString()
+                        } else if (be in 6500..11500 || be in 520..1750 || be in 65000..115000) {
+                            be.toString()
+                        } else {
+                            rawFreq.toString()
+                        }
+                    } else {
+                        rawFreq.toString()
+                    }
+                }
                 else -> rawFreq.toString().trim()
             }
 
@@ -731,8 +930,12 @@ class RadioManager(private val context: Context) {
             if (BLACKLISTED_TOKENS.any { lower.contains(it) }) return null
 
             var formattedFreq: String? = null
-            val isExplicitAm = str.contains("AM", ignoreCase = true) || rawBand?.contains("AM", ignoreCase = true) == true
-            val isExplicitFm = str.contains("FM", ignoreCase = true) || rawBand?.contains("FM", ignoreCase = true) == true
+            val isExplicitAm = str.contains("AM", ignoreCase = true) ||
+                rawBand?.contains("AM", ignoreCase = true) == true ||
+                rawBand == "3" || rawBand == "4"
+            val isExplicitFm = str.contains("FM", ignoreCase = true) ||
+                rawBand?.contains("FM", ignoreCase = true) == true ||
+                rawBand == "0" || rawBand == "1" || rawBand == "2"
 
             val directNum = str.toDoubleOrNull()
             if (directNum != null) {
@@ -752,14 +955,19 @@ class RadioManager(private val context: Context) {
                         val mhz = directNum / 1000.0
                         formattedFreq = String.format(Locale.US, "%.1f FM", mhz)
                     }
+                    // AM in 100 Hz / 10x kHz (5,200 - 17,500, e.g. 10500 -> 1050 AM)
+                    isExplicitAm && directNum in 5200.0..17500.0 -> {
+                        val khz = (directNum / 10.0).roundToInt()
+                        formattedFreq = "$khz AM"
+                    }
                     // FM in 10 kHz (6,500 - 11,500, e.g. 9850 -> 98.5 FM, standard Chinese car stereos Allwinner/QF/NWD)
                     directNum in 6500.0..11500.0 -> {
                         val mhz = directNum / 100.0
                         formattedFreq = String.format(Locale.US, "%.1f FM", mhz)
                     }
-                    // AM in kHz (520 - 1750 kHz) OR FM in 100 kHz (650 - 1150)
+                    // AM in kHz (520 - 1750 kHz) OR FM in 100 kHz (875 - 1080)
                     directNum in 520.0..1750.0 -> {
-                        formattedFreq = if (isExplicitFm && directNum <= 1150.0) {
+                        formattedFreq = if ((isExplicitFm || !isExplicitAm) && directNum in 875.0..1080.0) {
                             String.format(Locale.US, "%.1f FM", directNum / 10.0)
                         } else {
                             "${directNum.roundToInt()} AM"
@@ -794,11 +1002,14 @@ class RadioManager(private val context: Context) {
                             extractedNum in 65_000.0..115_000.0 -> {
                                 formattedFreq = String.format(Locale.US, "%.1f FM", extractedNum / 1000.0)
                             }
+                            isExplicitAm && extractedNum in 5200.0..17500.0 -> {
+                                formattedFreq = "${(extractedNum / 10.0).roundToInt()} AM"
+                            }
                             extractedNum in 6500.0..11500.0 -> {
                                 formattedFreq = String.format(Locale.US, "%.1f FM", extractedNum / 100.0)
                             }
                             extractedNum in 520.0..1750.0 -> {
-                                formattedFreq = if (isExplicitFm && extractedNum <= 1150.0) {
+                                formattedFreq = if ((isExplicitFm || !isExplicitAm) && extractedNum in 875.0..1080.0) {
                                     String.format(Locale.US, "%.1f FM", extractedNum / 10.0)
                                 } else {
                                     "${extractedNum.roundToInt()} AM"

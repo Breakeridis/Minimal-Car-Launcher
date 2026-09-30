@@ -62,6 +62,8 @@ class AppRepository(private val context: Context) {
         "com.soundcloud.android",
         "com.pandora.android",
         "com.nwd.radio",
+        "com.nwd.link.radio",
+        "com.nwd.radio.service",
         "com.navimods.radio",
         "com.navimods.radio_free",
         "com.android.fmradio",
