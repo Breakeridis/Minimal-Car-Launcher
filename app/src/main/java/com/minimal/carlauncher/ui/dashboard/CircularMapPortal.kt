@@ -500,7 +500,6 @@ fun CircularMapPortal(
                         setTileSource(TileSourceFactory.MAPNIK)
                         setMultiTouchControls(true)
                         isTilesScaledToDpi = true
-                        isDestroyMode = false
                         setHasTransientState(true)
                         controller.setZoom(16.5)
 
