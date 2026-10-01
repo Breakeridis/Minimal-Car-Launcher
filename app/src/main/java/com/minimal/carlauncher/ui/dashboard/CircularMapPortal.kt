@@ -1010,7 +1010,7 @@ fun CircularMapPortal(
             }
         }
 
-        // Top Floating Pill: Navigation Next Turn Maneuver OR Compass Heading
+        // Top Floating Pill: Navigation Next Turn Maneuver OR Compass Heading (DOUBLED SIZE)
         if (isNavigating && activeRoute != null) {
             val steps = activeRoute.steps
             val nextStep = steps.firstOrNull()
@@ -1019,25 +1019,25 @@ fun CircularMapPortal(
             Box(
                 modifier = Modifier
                     .align(Alignment.TopCenter)
-                    .padding(top = 10.dp)
-                    .clip(RoundedCornerShape(8.dp))
+                    .padding(top = 12.dp)
+                    .clip(RoundedCornerShape(16.dp))
                     .background(CarSurface.copy(alpha = 0.94f))
-                    .border(1.dp, AccentCyan.copy(alpha = 0.5f), RoundedCornerShape(8.dp))
-                    .padding(horizontal = 12.dp, vertical = 4.dp)
+                    .border(1.5.dp, AccentCyan.copy(alpha = 0.6f), RoundedCornerShape(16.dp))
+                    .padding(horizontal = 20.dp, vertical = 8.dp)
             ) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     Icon(
                         imageVector = Icons.Default.Navigation,
                         contentDescription = null,
                         tint = AccentCyan,
-                        modifier = Modifier.size(13.dp)
+                        modifier = Modifier.size(24.dp)
                     )
                     Text(
                         text = instructionText,
-                        fontSize = 11.sp,
+                        fontSize = 18.sp,
                         fontWeight = FontWeight.Bold,
                         color = TextPrimary,
                         letterSpacing = 0.3.sp,
@@ -1047,22 +1047,22 @@ fun CircularMapPortal(
                 }
             }
         } else {
-            // Normal Heading Pill
+            // Normal Heading Pill (DOUBLED SIZE)
             Box(
                 modifier = Modifier
                     .align(Alignment.TopCenter)
-                    .padding(top = 10.dp)
-                    .clip(RoundedCornerShape(8.dp))
+                    .padding(top = 12.dp)
+                    .clip(RoundedCornerShape(16.dp))
                     .background(CarSurface.copy(alpha = 0.95f))
-                    .border(1.dp, CarBorder, RoundedCornerShape(8.dp))
-                    .padding(horizontal = 10.dp, vertical = 3.dp)
+                    .border(1.5.dp, CarBorder, RoundedCornerShape(16.dp))
+                    .padding(horizontal = 20.dp, vertical = 6.dp)
             ) {
                 Text(
                     text = "$cardinalDirection • ${bearing.roundToInt()}°",
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Bold,
+                    fontSize = 22.sp,
+                    fontWeight = FontWeight.Black,
                     color = AccentCyan,
-                    letterSpacing = 0.5.sp
+                    letterSpacing = 0.8.sp
                 )
             }
         }

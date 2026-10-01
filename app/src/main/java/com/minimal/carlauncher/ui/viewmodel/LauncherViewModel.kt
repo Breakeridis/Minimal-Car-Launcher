@@ -542,6 +542,11 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
+    fun showRadioDiagnostic() {
+        val info = radioManager.getRadioDiagnosticInfo()
+        Toast.makeText(getApplication(), info, Toast.LENGTH_LONG).show()
+    }
+
     override fun onCleared() {
         super.onCleared()
         speedometer.stopTracking()

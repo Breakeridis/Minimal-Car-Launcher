@@ -11,6 +11,7 @@ import android.content.Intent
 class RadioBroadcastReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context?, intent: Intent?) {
         if (intent == null) return
+        if (intent.getBooleanExtra("is_launcher_source", false)) return
         RadioManager.onGlobalBroadcast(intent)
     }
 }

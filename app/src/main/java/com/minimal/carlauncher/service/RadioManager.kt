@@ -196,6 +196,7 @@ class RadioManager(private val context: Context) {
     private val radioReceiver = object : BroadcastReceiver() {
         override fun onReceive(ctx: Context?, intent: Intent?) {
             if (intent == null) return
+            if (intent.getBooleanExtra("is_launcher_source", false)) return
             extractFromIntent(intent)
         }
     }
@@ -633,6 +634,13 @@ class RadioManager(private val context: Context) {
         }
     }
 
+    fun getRadioDiagnosticInfo(): String {
+        val recs = getDynamicRadioReceivers()
+        val pkgs = recs.map { it.packageName }.distinct()
+        val freq = _radioStation.value ?: "None"
+        return "Radio: $freq | Detected: ${if (pkgs.isEmpty()) "None" else pkgs.joinToString()} (${recs.size} receivers)"
+    }
+
     private fun getDynamicRadioReceivers(): List<ComponentName> {
         synchronized(cachedDynamicReceivers) {
             if (hasCachedTargets) {
@@ -810,6 +818,10 @@ class RadioManager(private val context: Context) {
             putExtra("keyCode", primaryKeyCode)
             putExtra("key_code", primaryKeyCode)
         })
+        intentsToSend.add(Intent("com.nwd.action.ACTION_SEND_KEY_CODE").apply {
+            putExtra("keyCode", channelKeyCode)
+            putExtra("key_code", channelKeyCode)
+        })
         intentsToSend.add(Intent("com.nwd.action.ACTION_KEY").apply {
             putExtra("key", if (isNext) "next" else "prev")
             putExtra("keyCode", primaryKeyCode)
@@ -818,6 +830,7 @@ class RadioManager(private val context: Context) {
         // 6. Execute Dispatch (Global, Package-Targeted, Component-Targeted Broadcasts on background thread)
         CoroutineScope(Dispatchers.IO).launch {
             for (baseIntent in intentsToSend) {
+                baseIntent.putExtra("is_launcher_source", true)
                 baseIntent.addFlags(Intent.FLAG_RECEIVER_FOREGROUND or Intent.FLAG_INCLUDE_STOPPED_PACKAGES)
 
                 // 6a. Implicit Broadcast
@@ -839,25 +852,6 @@ class RadioManager(private val context: Context) {
                     } catch (e: Throwable) {}
                 }
             }
-
-            // 7. Direct Stepped Frequency Fallback
-            try {
-                val current = _radioStation.value
-                if (!current.isNullOrBlank()) {
-                    val match = Regex("""(\d{2,4}(?:\.\d{1,2})?)""").find(current)
-                    if (match != null) {
-                        val currDouble = match.value.toDoubleOrNull()
-                        if (currDouble != null && currDouble in 87.0..108.5) {
-                            val delta = if (isNext) 0.1 else -0.1
-                            var target = (Math.round((currDouble + delta) * 10.0) / 10.0)
-                            if (target > 108.0) target = 87.5
-                            if (target < 87.5) target = 108.0
-                            val targetStr = String.format(Locale.US, "%.1f", target)
-                            tuneToStation(targetStr, -1)
-                        }
-                    }
-                }
-            } catch (e: Throwable) {}
 
             delay(350L)
             requestRadioInfoPing()
@@ -962,6 +956,7 @@ class RadioManager(private val context: Context) {
 
         CoroutineScope(Dispatchers.IO).launch {
             for (intent in intents) {
+                intent.putExtra("is_launcher_source", true)
                 intent.addFlags(Intent.FLAG_RECEIVER_FOREGROUND or Intent.FLAG_INCLUDE_STOPPED_PACKAGES)
                 try {
                     context.sendBroadcast(intent)
@@ -1128,6 +1123,7 @@ class RadioManager(private val context: Context) {
     }
 
     fun extractFromIntent(intent: Intent) {
+        if (intent.getBooleanExtra("is_launcher_source", false)) return
         val extras = intent.extras
 
         // Support intent.data or dataString if URI encodes frequency (e.g. radio://... or content://...)

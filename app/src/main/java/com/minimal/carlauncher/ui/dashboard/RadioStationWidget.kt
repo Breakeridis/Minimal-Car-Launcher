@@ -56,6 +56,7 @@ fun RadioStationWidget(
     onSelectSavedStation: (String, Int) -> Unit = { _, _ -> },
     onSaveCurrentStation: (Int) -> Unit = {},
     onLaunchRadio: () -> Unit,
+    onShowDiagnostic: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val cardGradient = Brush.verticalGradient(
@@ -102,7 +103,11 @@ fun RadioStationWidget(
             ) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    modifier = Modifier.combinedClickable(
+                        onClick = { onLaunchRadio() },
+                        onLongClick = { onShowDiagnostic() }
+                    )
                 ) {
                     Icon(
                         imageVector = Icons.Default.Radio,
