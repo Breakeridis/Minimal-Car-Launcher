@@ -598,7 +598,6 @@ class RadioManager(private val context: Context) {
     }
 
     private val cachedDynamicReceivers = mutableListOf<ComponentName>()
-    private val cachedDynamicServices = mutableListOf<ComponentName>()
     @Volatile
     private var hasCachedTargets = false
 
@@ -606,37 +605,42 @@ class RadioManager(private val context: Context) {
         CoroutineScope(Dispatchers.IO).launch {
             try {
                 val pm = context.packageManager
-                val installed = pm.getInstalledPackages(
-                    android.content.pm.PackageManager.GET_RECEIVERS or android.content.pm.PackageManager.GET_SERVICES
-                )
+                val installed = pm.getInstalledPackages(android.content.pm.PackageManager.GET_RECEIVERS)
                 val recs = mutableListOf<ComponentName>()
-                val svcs = mutableListOf<ComponentName>()
                 for (pkg in installed) {
                     val pName = pkg.packageName.lowercase()
-                    if (pName.contains("radio") || pName.contains("nwd") || pName.contains("allwinner") || pName.contains("qf")) {
-                        pkg.receivers?.forEach { r -> recs.add(ComponentName(pkg.packageName, r.name)) }
-                        pkg.services?.forEach { s -> svcs.add(ComponentName(pkg.packageName, s.name)) }
+                    // Strictly isolate to genuine radio tuner packages; NEVER match general system / carkit / settings
+                    val isRadioPackage = (pName.contains("radio") || pName.contains("fmradio") || pName.contains("tuner")) &&
+                            !pName.contains("setting") && !pName.contains("carkit") && !pName.contains("can") &&
+                            !pName.contains("mcu") && !pName.contains("camera") && !pName.contains("dvr") &&
+                            !pName.contains("bluetooth") && !pName.contains("bt") && !pName.contains("wifi") &&
+                            !pName.contains("system")
+                    if (isRadioPackage) {
+                        pkg.receivers?.forEach { r ->
+                            val rName = r.name.lowercase()
+                            if (!rName.contains("carkit") && !rName.contains("setting") && !rName.contains("mcu") && !rName.contains("can")) {
+                                recs.add(ComponentName(pkg.packageName, r.name))
+                            }
+                        }
                     }
                 }
                 synchronized(cachedDynamicReceivers) {
                     cachedDynamicReceivers.clear()
                     cachedDynamicReceivers.addAll(recs)
-                    cachedDynamicServices.clear()
-                    cachedDynamicServices.addAll(svcs)
                     hasCachedTargets = true
                 }
             } catch (e: Throwable) {}
         }
     }
 
-    private fun getDynamicRadioTargets(): Pair<List<ComponentName>, List<ComponentName>> {
+    private fun getDynamicRadioReceivers(): List<ComponentName> {
         synchronized(cachedDynamicReceivers) {
             if (hasCachedTargets) {
-                return Pair(cachedDynamicReceivers.toList(), cachedDynamicServices.toList())
+                return cachedDynamicReceivers.toList()
             }
         }
         warmUpDynamicTargets()
-        return Pair(emptyList(), emptyList())
+        return emptyList()
     }
 
     /**
@@ -704,27 +708,20 @@ class RadioManager(private val context: Context) {
             } catch (e: Throwable) {}
         }
 
-        // 4. Discover Dynamic Radio Receivers and Services from PackageManager
-        val (dynamicReceivers, dynamicServices) = getDynamicRadioTargets()
-        val allTargetPackages = (radioPackages + dynamicReceivers.map { it.packageName } + dynamicServices.map { it.packageName }).distinct()
+        // 4. Discover Dynamic Radio Receivers from PackageManager (strictly radio only)
+        val dynamicReceivers = getDynamicRadioReceivers()
+        val allTargetPackages = (radioPackages + dynamicReceivers.map { it.packageName })
+            .filter { pkg ->
+                val p = pkg.lowercase()
+                (p.contains("radio") || p.contains("fm")) && !p.contains("setting") && !p.contains("carkit") && !p.contains("can") && !p.contains("mcu")
+            }
+            .distinct()
 
         // 5. Build Comprehensive Action Lists & Intent Bundles
         val stringCommands = if (isNext) {
             listOf("next", "seek_next", "seek_up", "tune_up", "step_up", "channel_up", "up", "search_up", "forward")
         } else {
             listOf("prev", "seek_prev", "seek_down", "tune_down", "step_down", "channel_down", "down", "search_down", "backward")
-        }
-
-        // MCU & NWD Integer Opcode variants:
-        // 3 = SEEK_DOWN/PREV, 4 = SEEK_UP/NEXT
-        // 7 = STEP_DOWN, 8 = STEP_UP
-        // 9 = TUNE_DOWN, 10 = TUNE_UP
-        // 11 = CMD_PREV, 12 = CMD_NEXT
-        // 21 = SEEK_PREV, 22 = SEEK_NEXT
-        val intCommands = if (isNext) {
-            listOf(4, 12, 8, 10, 22, 87, 166)
-        } else {
-            listOf(3, 11, 7, 9, 21, 88, 167)
         }
 
         val specificActions = if (isNext) {
@@ -758,7 +755,6 @@ class RadioManager(private val context: Context) {
         val commonActions = listOf(
             "com.nwd.action.ACTION_SEND_RADIO_COMMAND",
             "com.nwd.action.ACTION_RADIO_CMD",
-            "com.nwd.action.ACTION_CAR_KEY",
             "com.nwd.radio.action",
             "com.nwd.radio.command",
             "com.nwd.radio.cmd",
@@ -791,32 +787,25 @@ class RadioManager(private val context: Context) {
                     putExtra("action", sc)
                     putExtra("key", sc)
                     putExtra("keyCode", primaryKeyCode)
-                    putExtra("extra_cmd", if (isNext) 4 else 3)
-                    putExtra("nwd_cmd", if (isNext) 4 else 3)
                 })
             }
         }
 
-        // 5c. Common Actions with Integer Commands
-        for (act in commonActions) {
-            for (ic in intCommands) {
-                intentsToSend.add(Intent(act).apply {
-                    putExtra("command", ic)
-                    putExtra("extra_command", ic)
-                    putExtra("cmd", ic)
-                    putExtra("action", ic)
-                    putExtra("extra_cmd", ic)
-                    putExtra("nwd_cmd", ic)
-                    putExtra("cmd_id", ic)
-                    putExtra("opcode", ic)
-                    putExtra("code", ic)
-                    putExtra("type", ic)
-                    putExtra("keyCode", primaryKeyCode)
-                })
-            }
-        }
+        // 5c. NWD / MCU Specific Radio Opcode (3 = PREV, 4 = NEXT)
+        val nwdCmd = if (isNext) 4 else 3
+        intentsToSend.add(Intent("com.nwd.action.ACTION_SEND_RADIO_COMMAND").apply {
+            putExtra("command", nwdCmd)
+            putExtra("cmd", nwdCmd)
+            putExtra("extra_cmd", nwdCmd)
+            putExtra("nwd_cmd", nwdCmd)
+            putExtra("keyCode", primaryKeyCode)
+        })
+        intentsToSend.add(Intent("com.nwd.radio.action").apply {
+            putExtra("action", if (isNext) "next" else "prev")
+            putExtra("command", nwdCmd)
+        })
 
-        // 5d. Hardware / Key Code Specific Actions
+        // 5d. Radio Key Code Actions (Standard Android & NWD key injection)
         intentsToSend.add(Intent("com.nwd.action.ACTION_SEND_KEY_CODE").apply {
             putExtra("keyCode", primaryKeyCode)
             putExtra("key_code", primaryKeyCode)
@@ -825,12 +814,8 @@ class RadioManager(private val context: Context) {
             putExtra("key", if (isNext) "next" else "prev")
             putExtra("keyCode", primaryKeyCode)
         })
-        intentsToSend.add(Intent("com.nwd.action.ACTION_CAR_KEY").apply {
-            putExtra("key_code", primaryKeyCode)
-            putExtra("keyCode", primaryKeyCode)
-        })
 
-        // 6. Execute Dispatch (Global, Package-Targeted, Component-Targeted Broadcasts & Services on background thread)
+        // 6. Execute Dispatch (Global, Package-Targeted, Component-Targeted Broadcasts on background thread)
         CoroutineScope(Dispatchers.IO).launch {
             for (baseIntent in intentsToSend) {
                 baseIntent.addFlags(Intent.FLAG_RECEIVER_FOREGROUND or Intent.FLAG_INCLUDE_STOPPED_PACKAGES)
@@ -851,13 +836,6 @@ class RadioManager(private val context: Context) {
                 for (rec in dynamicReceivers) {
                     try {
                         context.sendBroadcast(Intent(baseIntent).apply { component = rec })
-                    } catch (e: Throwable) {}
-                }
-
-                // 6d. Explicit Service Start Commands (Delivers to onStartCommand)
-                for (svc in dynamicServices) {
-                    try {
-                        context.startService(Intent(baseIntent).apply { component = svc })
                     } catch (e: Throwable) {}
                 }
             }
@@ -974,8 +952,13 @@ class RadioManager(private val context: Context) {
             })
         }
 
-        val (dynamicReceivers, dynamicServices) = getDynamicRadioTargets()
-        val allTargetPackages = (radioPackages + dynamicReceivers.map { it.packageName } + dynamicServices.map { it.packageName }).distinct()
+        val dynamicReceivers = getDynamicRadioReceivers()
+        val allTargetPackages = (radioPackages + dynamicReceivers.map { it.packageName })
+            .filter { pkg ->
+                val p = pkg.lowercase()
+                (p.contains("radio") || p.contains("fm")) && !p.contains("setting") && !p.contains("carkit") && !p.contains("can") && !p.contains("mcu")
+            }
+            .distinct()
 
         CoroutineScope(Dispatchers.IO).launch {
             for (intent in intents) {
@@ -991,11 +974,6 @@ class RadioManager(private val context: Context) {
                 for (rec in dynamicReceivers) {
                     try {
                         context.sendBroadcast(Intent(intent).apply { component = rec })
-                    } catch (e: Throwable) {}
-                }
-                for (svc in dynamicServices) {
-                    try {
-                        context.startService(Intent(intent).apply { component = svc })
                     } catch (e: Throwable) {}
                 }
             }
