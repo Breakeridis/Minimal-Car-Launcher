@@ -6,6 +6,8 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.minimal.carlauncher.data.AppInfo
 import com.minimal.carlauncher.data.AppRepository
+import com.minimal.carlauncher.service.DiagnosticsManager
+import com.minimal.carlauncher.service.DiagnosticEvent
 import com.minimal.carlauncher.service.NavigationRoute
 import com.minimal.carlauncher.service.NavigationService
 import com.minimal.carlauncher.service.RadioManager
@@ -133,6 +135,11 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
 
     private val _isAboutDialogOpen = MutableStateFlow(false)
     val isAboutDialogOpen: StateFlow<Boolean> = _isAboutDialogOpen.asStateFlow()
+
+    // Diagnostics Dialog State
+    private val _isDiagnosticsDialogOpen = MutableStateFlow(false)
+    val isDiagnosticsDialogOpen: StateFlow<Boolean> = _isDiagnosticsDialogOpen.asStateFlow()
+    val diagnosticEvents: StateFlow<List<DiagnosticEvent>> = DiagnosticsManager.events
 
     private val _isCheckingUpdate = MutableStateFlow(false)
     val isCheckingUpdate: StateFlow<Boolean> = _isCheckingUpdate.asStateFlow()
@@ -338,6 +345,31 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
         if (_updateDownloadProgress.value == null) {
             _isAboutDialogOpen.value = false
         }
+    }
+
+    fun openDiagnosticsDialog() {
+        _isDiagnosticsDialogOpen.value = true
+    }
+
+    fun dismissDiagnosticsDialog() {
+        _isDiagnosticsDialogOpen.value = false
+    }
+
+    fun copyDiagnosticsReport() {
+        DiagnosticsManager.copyReportToClipboard(
+            getApplication(),
+            radioStation.value,
+            isRadioActive.value,
+            savedRadioStations.value
+        )
+    }
+
+    fun clearDiagnosticsLog() {
+        DiagnosticsManager.clearEvents()
+    }
+
+    fun pingRadio() {
+        radioManager.requestRadioInfoPing()
     }
 
     fun checkForUpdates(isManualCheck: Boolean = true) {

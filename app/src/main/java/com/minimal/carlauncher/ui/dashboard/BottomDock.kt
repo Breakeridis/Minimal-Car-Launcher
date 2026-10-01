@@ -164,10 +164,12 @@ fun LeftBottomDock(
  * Right Bottom Dock: Hosts vehicle utility tools including the About / Update checker and
  * Android System Settings shortcut.
  */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun RightBottomDock(
     onOpenAbout: () -> Unit,
     onOpenSettings: () -> Unit,
+    onLongPressSettings: () -> Unit = {},
     isUpdateAvailable: Boolean = false,
     modifier: Modifier = Modifier
 ) {
@@ -243,7 +245,10 @@ fun RightBottomDock(
                 .clip(RoundedCornerShape(14.dp))
                 .background(CarSurfaceVariant.copy(alpha = 0.85f))
                 .border(1.dp, CarBorder.copy(alpha = 0.45f), RoundedCornerShape(14.dp))
-                .clickable { onOpenSettings() }
+                .combinedClickable(
+                    onClick = { onOpenSettings() },
+                    onLongClick = { onLongPressSettings() }
+                )
                 .padding(horizontal = 10.dp, vertical = 12.dp),
             horizontalArrangement = Arrangement.Center,
             verticalAlignment = Alignment.CenterVertically
@@ -278,6 +283,7 @@ fun BottomDock(
     onAddApp: () -> Unit,
     onOpenAbout: () -> Unit,
     onOpenSettings: () -> Unit,
+    onLongPressSettings: () -> Unit = {},
     isUpdateAvailable: Boolean = false,
     modifier: Modifier = Modifier
 ) {
@@ -296,6 +302,7 @@ fun BottomDock(
         RightBottomDock(
             onOpenAbout = onOpenAbout,
             onOpenSettings = onOpenSettings,
+            onLongPressSettings = onLongPressSettings,
             isUpdateAvailable = isUpdateAvailable,
             modifier = Modifier.weight(1f)
         )

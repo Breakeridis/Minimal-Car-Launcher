@@ -21,6 +21,7 @@ import androidx.compose.ui.unit.dp
 import com.minimal.carlauncher.ui.dialogs.AboutDialog
 import com.minimal.carlauncher.ui.dialogs.AddressSearchDialog
 import com.minimal.carlauncher.ui.dialogs.AppPickerDialog
+import com.minimal.carlauncher.ui.dialogs.DiagnosticsDialog
 import com.minimal.carlauncher.ui.dialogs.DockActionDialog
 import com.minimal.carlauncher.ui.dialogs.DrawerActionDialog
 import com.minimal.carlauncher.ui.drawer.AppDrawerDialog
@@ -69,6 +70,7 @@ fun DashboardScreen(
 
     val currentVersion = viewModel.currentVersion
     val isAboutDialogOpen by viewModel.isAboutDialogOpen.collectAsState()
+    val isDiagnosticsDialogOpen by viewModel.isDiagnosticsDialogOpen.collectAsState()
     val isCheckingUpdate by viewModel.isCheckingUpdate.collectAsState()
     val updateInfo by viewModel.updateInfo.collectAsState()
     val updateProgress by viewModel.updateDownloadProgress.collectAsState()
@@ -183,6 +185,7 @@ fun DashboardScreen(
                 RightBottomDock(
                     onOpenAbout = { viewModel.openAboutDialog() },
                     onOpenSettings = { viewModel.launchSettings() },
+                    onLongPressSettings = { viewModel.openDiagnosticsDialog() },
                     isUpdateAvailable = updateInfo?.isUpdateAvailable == true,
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -272,6 +275,13 @@ fun DashboardScreen(
             onDismiss = { viewModel.dismissAboutDialog() },
             isDarkMode = isDarkMode,
             onToggleDarkMode = { viewModel.toggleDarkMode() }
+        )
+
+        // System & Radio Diagnostics Dialog (Long-press Settings)
+        DiagnosticsDialog(
+            isOpen = isDiagnosticsDialogOpen,
+            onDismiss = { viewModel.dismissDiagnosticsDialog() },
+            viewModel = viewModel
         )
 
         // Address Search Autocomplete Dialog

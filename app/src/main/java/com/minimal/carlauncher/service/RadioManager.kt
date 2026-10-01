@@ -189,6 +189,7 @@ class RadioManager(private val context: Context) {
     private val settingsObserver = object : ContentObserver(bgHandler) {
         override fun onChange(selfChange: Boolean, uri: Uri?) {
             super.onChange(selfChange, uri)
+            DiagnosticsManager.logSettingsChange(uri?.toString() ?: "content://settings/system")
             readCurrentSettingsFrequency()
         }
     }
@@ -196,7 +197,9 @@ class RadioManager(private val context: Context) {
     private val radioReceiver = object : BroadcastReceiver() {
         override fun onReceive(ctx: Context?, intent: Intent?) {
             if (intent == null) return
-            if (intent.getBooleanExtra("is_launcher_source", false)) return
+            val isLauncher = intent.getBooleanExtra("is_launcher_source", false)
+            DiagnosticsManager.logIntent(intent, isIncoming = !isLauncher)
+            if (isLauncher) return
             extractFromIntent(intent)
         }
     }
@@ -828,6 +831,7 @@ class RadioManager(private val context: Context) {
         })
 
         // 6. Execute Dispatch (Global, Package-Targeted, Component-Targeted Broadcasts on background thread)
+        DiagnosticsManager.logRadioAction("DISPATCH_COMMAND", "Sent ${if (isNext) "NEXT" else "PREVIOUS"} to ${intentsToSend.size} actions")
         CoroutineScope(Dispatchers.IO).launch {
             for (baseIntent in intentsToSend) {
                 baseIntent.putExtra("is_launcher_source", true)
@@ -954,6 +958,7 @@ class RadioManager(private val context: Context) {
             }
             .distinct()
 
+        DiagnosticsManager.logRadioAction("TUNE_STATION", "Tuning to $frequencyStr (preset $presetIndex) - dispatched ${intents.size} intents")
         CoroutineScope(Dispatchers.IO).launch {
             for (intent in intents) {
                 intent.putExtra("is_launcher_source", true)
@@ -1280,6 +1285,7 @@ class RadioManager(private val context: Context) {
         if (detectedFreq != null) {
             val formatted = formatFrequency(detectedFreq, detectedBand, detectedName)
             if (formatted != null) {
+                DiagnosticsManager.logRadioAction("FREQUENCY_UPDATE", "Parsed $formatted from action ${intent.action}")
                 _radioStation.value = formatted
                 _isRadioActive.value = true
                 return
