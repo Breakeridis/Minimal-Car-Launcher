@@ -8,6 +8,7 @@ import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
 import android.os.Build
 import android.provider.Settings
+import android.util.Base64
 import android.widget.Toast
 import com.minimal.carlauncher.BuildConfig
 import kotlinx.coroutines.Dispatchers
@@ -18,10 +19,16 @@ import java.io.File
 import java.io.InputStreamReader
 import java.net.HttpURLConnection
 import java.net.URL
+import java.security.KeyFactory
+import java.security.SecureRandom
+import java.security.spec.X509EncodedKeySpec
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import java.util.zip.ZipFile
+import javax.crypto.Cipher
+import javax.crypto.spec.IvParameterSpec
+import javax.crypto.spec.SecretKeySpec
 
 data class PackageDiagnosticInfo(
     val label: String,
@@ -399,8 +406,8 @@ object DiagnosticsManager {
         val seen = HashSet<String>()
 
         val keywords = listOf(
-            "radio", "freq", "fm", "am", "band", "channel", "tuner", "rds",
-            "mcu", "nwd", "qf", "syu", "ts", "forfan", "source", "audio", "car"
+            "radio", "freq", "fm_", "tuner", "rds",
+            "mcu", "nwd", "qf_", "syu", "ts_", "forfan", "carkit"
         )
 
         val tables = listOf(
@@ -518,9 +525,38 @@ object DiagnosticsManager {
         appendLine("==================================================")
     }
 
-    private const val NTFY_TOPIC = "breakeridis_carlauncher_diag_6974c07f"
+    private const val NTFY_TOPIC = "breakeridis_carlauncher_enc_6974c07f"
     private const val NTFY_URL = "https://ntfy.sh/$NTFY_TOPIC"
     private const val GITHUB_ISSUES_URL = "https://api.github.com/repos/Breakeridis/Minimal-Car-Launcher/issues"
+
+    /**
+     * RSA-2048 X.509 Public Key used to wrap the one-time AES-256 key.
+     * The matching RSA Private Key is stored ONLY in the local developer workspace (never in GitHub),
+     * so uploaded reports are 100% unreadable to anyone else even on a public channel.
+     */
+    private const val RSA_PUBLIC_KEY_B64 =
+        "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAzB5DinTdzr2+dx/YPx/3UGVk61tzIbdfbE6LAT2xK9AcSmV+LSVh8VwKetQmhj2pAMOOyySRM63gukukMia1MG9puN0OQJssEnwx2WpcRlQ3TQerTr8q+mYSlzxfeNbLw/MfDu2viWdVMo9fvJs9OSB021zPyt+ypEmIj3YNV5Px+Qr1iuPC3AxZQniymB71c/mi/ee/PAZTnrk2b8rx1A1AYOUVzPgoNiVM0KpmvlJExU9LWydRzDtWSOVdYxC7wTedG/kdBieHQHXKiEjLOM/ShvX/lsijqbDMGrnow0rFkuwWb6GBihss+k8N5JDWMjgRru2Wahw+aVR41Y3dxQIDAQAB"
+
+    private fun encryptReportPayload(plainText: String): String {
+        val random = SecureRandom()
+        val aesKey = ByteArray(32).also { random.nextBytes(it) }
+        val iv = ByteArray(16).also { random.nextBytes(it) }
+
+        val aesCipher = Cipher.getInstance("AES/CBC/PKCS5Padding")
+        aesCipher.init(Cipher.ENCRYPT_MODE, SecretKeySpec(aesKey, "AES"), IvParameterSpec(iv))
+        val cipherBytes = aesCipher.doFinal(plainText.toByteArray(Charsets.UTF_8))
+
+        val pubKeyBytes = Base64.decode(RSA_PUBLIC_KEY_B64, Base64.DEFAULT)
+        val publicKey = KeyFactory.getInstance("RSA").generatePublic(X509EncodedKeySpec(pubKeyBytes))
+        val rsaCipher = Cipher.getInstance("RSA/ECB/PKCS1Padding")
+        rsaCipher.init(Cipher.ENCRYPT_MODE, publicKey)
+        val encryptedAesKey = rsaCipher.doFinal(aesKey)
+
+        val keyB64 = Base64.encodeToString(encryptedAesKey, Base64.NO_WRAP)
+        val ivB64 = Base64.encodeToString(iv, Base64.NO_WRAP)
+        val dataB64 = Base64.encodeToString(cipherBytes, Base64.NO_WRAP)
+        return "ENC_RSA_AES_V1:$keyB64:$ivB64:$dataB64"
+    }
 
     suspend fun uploadReportToCloud(
         context: Context,
@@ -536,21 +572,21 @@ object DiagnosticsManager {
                 append(buildFullReport(context))
             }
 
-            // 1. Upload to zero-token ntfy.sh cloud channel as attachment file
+            val encryptedPayload = encryptReportPayload(fullReport)
+
+            // 1. Upload AES-256 + RSA-2048 encrypted ciphertext to ntfy.sh cloud channel
             val conn = (URL(NTFY_URL).openConnection() as HttpURLConnection).apply {
                 requestMethod = "PUT"
                 connectTimeout = 15_000
                 readTimeout = 15_000
                 doOutput = true
-                val modelTag = "${Build.MANUFACTURER ?: ""} ${Build.MODEL ?: "HeadUnit"}".trim()
-                    .replace(Regex("[^A-Za-z0-9 _.-]"), "")
-                setRequestProperty("Title", "HeadUnit Report: $modelTag")
-                setRequestProperty("Filename", "headunit_report.txt")
+                setRequestProperty("Title", "Encrypted Car Launcher Report")
+                setRequestProperty("Filename", "headunit_report.enc")
                 setRequestProperty("Content-Type", "text/plain; charset=utf-8")
             }
 
             conn.outputStream.use { out ->
-                out.write(fullReport.toByteArray(Charsets.UTF_8))
+                out.write(encryptedPayload.toByteArray(Charsets.UTF_8))
                 out.flush()
             }
 
@@ -568,14 +604,14 @@ object DiagnosticsManager {
                 "OK"
             }
 
-            // 2. Optional: If GITHUB_FEEDBACK_TOKEN is configured at build time, also post a GitHub Issue
+            // 2. Optional: If GITHUB_FEEDBACK_TOKEN is configured at build time, also post encrypted payload
             val ghToken = BuildConfig.GITHUB_FEEDBACK_TOKEN.trim()
             var ghIssueNumber: Int? = null
             if (ghToken.isNotEmpty()) {
                 try {
                     val issueJson = JSONObject().apply {
-                        put("title", "Head Unit Report: ${Build.MANUFACTURER} ${Build.MODEL} (${Build.BOARD})")
-                        put("body", "```text\n${fullReport.take(60_000)}\n```")
+                        put("title", "Encrypted Head Unit Report ($msgId)")
+                        put("body", "```text\n${encryptedPayload.take(60_000)}\n```")
                     }
                     val ghConn = (URL(GITHUB_ISSUES_URL).openConnection() as HttpURLConnection).apply {
                         requestMethod = "POST"
@@ -601,9 +637,9 @@ object DiagnosticsManager {
             }
 
             val summary = if (ghIssueNumber != null) {
-                "Uploaded! (Cloud ID: $msgId, GitHub Issue #$ghIssueNumber)"
+                "Encrypted & Uploaded! (ID: $msgId, Issue #$ghIssueNumber)"
             } else {
-                "Uploaded! (ID: $msgId)"
+                "Encrypted & Uploaded! (ID: $msgId)"
             }
             Result.success(summary)
         } catch (e: Throwable) {
