@@ -24,6 +24,7 @@ import com.minimal.carlauncher.ui.dialogs.AppPickerDialog
 import com.minimal.carlauncher.ui.dialogs.DiagnosticsDialog
 import com.minimal.carlauncher.ui.dialogs.DockActionDialog
 import com.minimal.carlauncher.ui.dialogs.DrawerActionDialog
+import com.minimal.carlauncher.ui.dialogs.LauncherSettingsDialog
 import com.minimal.carlauncher.ui.drawer.AppDrawerDialog
 import com.minimal.carlauncher.ui.theme.CarBg
 import com.minimal.carlauncher.ui.viewmodel.LauncherViewModel
@@ -79,6 +80,16 @@ fun DashboardScreen(
     val isCheckingUpdate by viewModel.isCheckingUpdate.collectAsState()
     val updateInfo by viewModel.updateInfo.collectAsState()
     val updateProgress by viewModel.updateDownloadProgress.collectAsState()
+
+    // Launcher Settings State
+    val isLauncherSettingsOpen by viewModel.isLauncherSettingsOpen.collectAsState()
+    val googleStatuses by viewModel.googleStatuses.collectAsState()
+    val isRootAvailable by viewModel.isRootAvailable.collectAsState()
+    val busyPackage by viewModel.busyPackage.collectAsState()
+    val settingsMessage by viewModel.settingsMessage.collectAsState()
+    val auroraInstalledVersion by viewModel.auroraInstalledVersion.collectAsState()
+    val auroraDownloadProgress by viewModel.auroraDownloadProgress.collectAsState()
+    val auroraStatusMessage by viewModel.auroraStatusMessage.collectAsState()
 
     // Minimap Navigation State
     val isSearchDialogOpen by viewModel.isAddressSearchOpen.collectAsState()
@@ -189,7 +200,7 @@ fun DashboardScreen(
 
                 RightBottomDock(
                     onOpenAbout = { viewModel.openAboutDialog() },
-                    onOpenSettings = { viewModel.launchSettings() },
+                    onOpenSettings = { viewModel.openLauncherSettings() },
                     onLongPressSettings = { viewModel.openDiagnosticsDialog() },
                     isUpdateAvailable = updateInfo?.isUpdateAvailable == true,
                     modifier = Modifier.fillMaxWidth()
@@ -291,6 +302,26 @@ fun DashboardScreen(
             isOpen = isDiagnosticsDialogOpen,
             onDismiss = { viewModel.dismissDiagnosticsDialog() },
             viewModel = viewModel
+        )
+
+        // Launcher Settings (Google services toggles & Aurora Store installer)
+        LauncherSettingsDialog(
+            isOpen = isLauncherSettingsOpen,
+            googleStatuses = googleStatuses,
+            isRootAvailable = isRootAvailable,
+            busyPackage = busyPackage,
+            settingsMessage = settingsMessage,
+            auroraInstalledVersion = auroraInstalledVersion,
+            auroraDownloadProgress = auroraDownloadProgress,
+            auroraStatusMessage = auroraStatusMessage,
+            onToggleGooglePackage = { pkg, enable -> viewModel.setGooglePackageEnabled(pkg, enable) },
+            onSetAllGoogle = { enable -> viewModel.setAllGoogleEnabled(enable) },
+            onOpenAppInfo = { pkg -> viewModel.openSystemAppInfo(pkg) },
+            onRefresh = { viewModel.refreshSystemAppStatuses() },
+            onOpenAndroidSettings = { viewModel.openAndroidSettings() },
+            onInstallAurora = { viewModel.downloadAndInstallAurora() },
+            onLaunchAurora = { viewModel.launchAuroraStore() },
+            onDismiss = { viewModel.dismissLauncherSettings() }
         )
 
         // Address Search Autocomplete Dialog

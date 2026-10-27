@@ -11,6 +11,8 @@ import com.minimal.carlauncher.service.NavigationRoute
 import com.minimal.carlauncher.service.NavigationService
 import com.minimal.carlauncher.service.NwdRadioController
 import com.minimal.carlauncher.service.SpeedometerManager
+import com.minimal.carlauncher.service.SystemAppsManager
+import com.minimal.carlauncher.service.SystemPackageStatus
 import com.minimal.carlauncher.service.UpdateInfo
 import com.minimal.carlauncher.service.UpdateManager
 import kotlinx.coroutines.Dispatchers
@@ -151,6 +153,33 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
 
     private val _updateDownloadProgress = MutableStateFlow<Int?>(null)
     val updateDownloadProgress: StateFlow<Int?> = _updateDownloadProgress.asStateFlow()
+
+    // Launcher Settings (Google services toggles & Aurora Store installer)
+    private val systemAppsManager = SystemAppsManager(application)
+
+    private val _isLauncherSettingsOpen = MutableStateFlow(false)
+    val isLauncherSettingsOpen: StateFlow<Boolean> = _isLauncherSettingsOpen.asStateFlow()
+
+    private val _googleStatuses = MutableStateFlow<List<SystemPackageStatus>>(emptyList())
+    val googleStatuses: StateFlow<List<SystemPackageStatus>> = _googleStatuses.asStateFlow()
+
+    private val _isRootAvailable = MutableStateFlow(false)
+    val isRootAvailable: StateFlow<Boolean> = _isRootAvailable.asStateFlow()
+
+    private val _busyPackage = MutableStateFlow<String?>(null)
+    val busyPackage: StateFlow<String?> = _busyPackage.asStateFlow()
+
+    private val _settingsMessage = MutableStateFlow<String?>(null)
+    val settingsMessage: StateFlow<String?> = _settingsMessage.asStateFlow()
+
+    private val _auroraInstalledVersion = MutableStateFlow<String?>(null)
+    val auroraInstalledVersion: StateFlow<String?> = _auroraInstalledVersion.asStateFlow()
+
+    private val _auroraDownloadProgress = MutableStateFlow<Int?>(null)
+    val auroraDownloadProgress: StateFlow<Int?> = _auroraDownloadProgress.asStateFlow()
+
+    private val _auroraStatusMessage = MutableStateFlow<String?>(null)
+    val auroraStatusMessage: StateFlow<String?> = _auroraStatusMessage.asStateFlow()
 
     init {
         loadApps(force = true)
@@ -446,6 +475,116 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
             } else {
                 _updateDownloadProgress.value = null
                 Toast.makeText(getApplication(), "Download failed. Please check internet connection.", Toast.LENGTH_LONG).show()
+            }
+        }
+    }
+
+    // --- Launcher Settings: Google Services & Aurora Store ---
+
+    fun openLauncherSettings() {
+        _settingsMessage.value = null
+        _isLauncherSettingsOpen.value = true
+        refreshSystemAppStatuses()
+    }
+
+    fun dismissLauncherSettings() {
+        if (_auroraDownloadProgress.value == null) {
+            _isLauncherSettingsOpen.value = false
+        }
+    }
+
+    fun refreshSystemAppStatuses() {
+        viewModelScope.launch(Dispatchers.IO) {
+            _googleStatuses.value = systemAppsManager.getGoogleStatuses()
+            _isRootAvailable.value = systemAppsManager.isRootBinaryPresent()
+            _auroraInstalledVersion.value = systemAppsManager.getInstalledAuroraVersion()
+        }
+    }
+
+    fun setGooglePackageEnabled(packageName: String, enable: Boolean) {
+        if (_busyPackage.value != null) return
+        viewModelScope.launch {
+            _busyPackage.value = packageName
+            val result = systemAppsManager.setPackageEnabled(packageName, enable)
+            _busyPackage.value = null
+            val label = SystemAppsManager.GOOGLE_PACKAGES.firstOrNull { it.first == packageName }?.second ?: packageName
+            _settingsMessage.value = if (result.success) {
+                "✅ $label ${if (enable) "enabled" else "disabled"} (via ${result.method})"
+            } else {
+                "❌ $label: ${result.message}"
+            }
+            refreshSystemAppStatuses()
+        }
+    }
+
+    fun setAllGoogleEnabled(enable: Boolean) {
+        if (_busyPackage.value != null) return
+        viewModelScope.launch {
+            val packages = SystemAppsManager.GOOGLE_PACKAGES.map { it.first }
+                .let { if (enable) it else it.reversed() }
+            val failures = mutableListOf<String>()
+            var lastFailureMessage: String? = null
+            for (pkg in packages) {
+                if (!systemAppsManager.getStatus(pkg, pkg).isInstalled) {
+                    // Skip packages that are not present at all
+                    continue
+                }
+                _busyPackage.value = pkg
+                val result = systemAppsManager.setPackageEnabled(pkg, enable)
+                if (!result.success) {
+                    failures += pkg
+                    lastFailureMessage = result.message
+                }
+            }
+            _busyPackage.value = null
+            _settingsMessage.value = if (failures.isEmpty()) {
+                "✅ Google services ${if (enable) "enabled" else "disabled"}"
+            } else {
+                "❌ ${lastFailureMessage ?: "Failed"}"
+            }
+            refreshSystemAppStatuses()
+        }
+    }
+
+    fun openSystemAppInfo(packageName: String) {
+        if (!systemAppsManager.openAppInfo(packageName)) {
+            Toast.makeText(getApplication(), "Could not open App Info", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    fun openAndroidSettings() {
+        repository.launchSettings()
+    }
+
+    fun launchAuroraStore() {
+        if (!systemAppsManager.launchPackage(SystemAppsManager.PKG_AURORA)) {
+            Toast.makeText(getApplication(), "Could not open Aurora Store", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    fun downloadAndInstallAurora() {
+        if (_auroraDownloadProgress.value != null) return
+        viewModelScope.launch {
+            _auroraStatusMessage.value = "Looking up latest Aurora Store release..."
+            _auroraDownloadProgress.value = 0
+            val release = systemAppsManager.fetchLatestAurora()
+            if (release == null) {
+                _auroraDownloadProgress.value = null
+                _auroraStatusMessage.value = "❌ Could not reach F-Droid or GitLab. Check internet connection."
+                return@launch
+            }
+
+            _auroraStatusMessage.value = "Downloading Aurora Store ${release.versionName} from ${release.source}..."
+            val file = updateManager.downloadApk(release.apkUrl, "aurora_store.apk") { progress ->
+                _auroraDownloadProgress.value = progress
+            }
+            _auroraDownloadProgress.value = null
+
+            if (file != null && file.exists() && file.length() > 0) {
+                _auroraStatusMessage.value = "✅ Downloaded ${release.versionName}. Confirm the installation prompt."
+                updateManager.promptInstall(file)
+            } else {
+                _auroraStatusMessage.value = "❌ Download failed. Please check internet connection."
             }
         }
     }

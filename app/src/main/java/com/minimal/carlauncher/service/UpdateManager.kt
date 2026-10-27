@@ -146,11 +146,12 @@ class UpdateManager(private val context: Context) {
 
     suspend fun downloadApk(
         downloadUrl: String,
+        fileName: String = "update.apk",
         onProgress: (Int) -> Unit
     ): File? = withContext(Dispatchers.IO) {
         var connection: HttpURLConnection? = null
         try {
-            val targetFile = File(context.cacheDir, "update.apk")
+            val targetFile = File(context.cacheDir, fileName)
             if (targetFile.exists()) {
                 targetFile.delete()
             }
