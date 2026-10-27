@@ -7,6 +7,10 @@ val buildNum = providers.gradleProperty("buildNumber")
     .orElse(providers.environmentVariable("GITHUB_RUN_NUMBER"))
     .getOrElse("8")
 
+val feedbackToken = providers.gradleProperty("feedbackToken")
+    .orElse(providers.environmentVariable("GITHUB_FEEDBACK_TOKEN"))
+    .getOrElse("")
+
 val appVersionCode = buildNum.toIntOrNull()?.takeIf { it > 0 } ?: 1
 val appVersionName = "1.0.$buildNum"
 
@@ -20,6 +24,8 @@ android {
         targetSdk = 34
         versionCode = appVersionCode
         versionName = appVersionName
+
+        buildConfigField("String", "GITHUB_FEEDBACK_TOKEN", "\"$feedbackToken\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -63,6 +69,7 @@ android {
 
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 
     composeOptions {

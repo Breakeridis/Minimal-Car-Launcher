@@ -9,9 +9,15 @@ import android.content.pm.PackageManager
 import android.os.Build
 import android.provider.Settings
 import android.widget.Toast
+import com.minimal.carlauncher.BuildConfig
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import org.json.JSONObject
 import java.io.BufferedReader
 import java.io.File
 import java.io.InputStreamReader
+import java.net.HttpURLConnection
+import java.net.URL
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -510,6 +516,99 @@ object DiagnosticsManager {
             }
         }
         appendLine("==================================================")
+    }
+
+    private const val NTFY_TOPIC = "breakeridis_carlauncher_diag_6974c07f"
+    private const val NTFY_URL = "https://ntfy.sh/$NTFY_TOPIC"
+    private const val GITHUB_ISSUES_URL = "https://api.github.com/repos/Breakeridis/Minimal-Car-Launcher/issues"
+
+    suspend fun uploadReportToCloud(
+        context: Context,
+        userNote: String = ""
+    ): Result<String> = withContext(Dispatchers.IO) {
+        try {
+            val fullReport = buildString {
+                if (userNote.isNotBlank()) {
+                    appendLine("### USER FEEDBACK / NOTE")
+                    appendLine(userNote.trim())
+                    appendLine()
+                }
+                append(buildFullReport(context))
+            }
+
+            // 1. Upload to zero-token ntfy.sh cloud channel as attachment file
+            val conn = (URL(NTFY_URL).openConnection() as HttpURLConnection).apply {
+                requestMethod = "PUT"
+                connectTimeout = 15_000
+                readTimeout = 15_000
+                doOutput = true
+                val modelTag = "${Build.MANUFACTURER ?: ""} ${Build.MODEL ?: "HeadUnit"}".trim()
+                    .replace(Regex("[^A-Za-z0-9 _.-]"), "")
+                setRequestProperty("Title", "HeadUnit Report: $modelTag")
+                setRequestProperty("Filename", "headunit_report.txt")
+                setRequestProperty("Content-Type", "text/plain; charset=utf-8")
+            }
+
+            conn.outputStream.use { out ->
+                out.write(fullReport.toByteArray(Charsets.UTF_8))
+                out.flush()
+            }
+
+            val code = conn.responseCode
+            val respText = (if (code in 200..299) conn.inputStream else conn.errorStream)
+                ?.bufferedReader()?.use { it.readText() }.orEmpty()
+
+            if (code !in 200..299) {
+                return@withContext Result.failure(Exception("HTTP $code: $respText"))
+            }
+
+            val msgId = try {
+                JSONObject(respText).optString("id", "OK")
+            } catch (e: Throwable) {
+                "OK"
+            }
+
+            // 2. Optional: If GITHUB_FEEDBACK_TOKEN is configured at build time, also post a GitHub Issue
+            val ghToken = BuildConfig.GITHUB_FEEDBACK_TOKEN.trim()
+            var ghIssueNumber: Int? = null
+            if (ghToken.isNotEmpty()) {
+                try {
+                    val issueJson = JSONObject().apply {
+                        put("title", "Head Unit Report: ${Build.MANUFACTURER} ${Build.MODEL} (${Build.BOARD})")
+                        put("body", "```text\n${fullReport.take(60_000)}\n```")
+                    }
+                    val ghConn = (URL(GITHUB_ISSUES_URL).openConnection() as HttpURLConnection).apply {
+                        requestMethod = "POST"
+                        connectTimeout = 12_000
+                        readTimeout = 12_000
+                        doOutput = true
+                        setRequestProperty("Authorization", "Bearer $ghToken")
+                        setRequestProperty("Accept", "application/vnd.github+json")
+                        setRequestProperty("Content-Type", "application/json; charset=utf-8")
+                        setRequestProperty("User-Agent", "Minimal-Car-Launcher")
+                    }
+                    ghConn.outputStream.use { out ->
+                        out.write(issueJson.toString().toByteArray(Charsets.UTF_8))
+                        out.flush()
+                    }
+                    if (ghConn.responseCode in 200..299) {
+                        val ghResp = ghConn.inputStream.bufferedReader().use { it.readText() }
+                        ghIssueNumber = JSONObject(ghResp).optInt("number").takeIf { it > 0 }
+                    }
+                } catch (e: Throwable) {
+                    // Ignore optional GitHub error since primary cloud upload succeeded
+                }
+            }
+
+            val summary = if (ghIssueNumber != null) {
+                "Uploaded! (Cloud ID: $msgId, GitHub Issue #$ghIssueNumber)"
+            } else {
+                "Uploaded! (ID: $msgId)"
+            }
+            Result.success(summary)
+        } catch (e: Throwable) {
+            Result.failure(e)
+        }
     }
 
     fun copyReportToClipboard(context: Context): Boolean {

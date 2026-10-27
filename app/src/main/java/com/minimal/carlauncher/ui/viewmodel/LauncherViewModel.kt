@@ -135,6 +135,12 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
     private val _isDiagnosticsDialogOpen = MutableStateFlow(false)
     val isDiagnosticsDialogOpen: StateFlow<Boolean> = _isDiagnosticsDialogOpen.asStateFlow()
 
+    private val _isUploadingReport = MutableStateFlow(false)
+    val isUploadingReport: StateFlow<Boolean> = _isUploadingReport.asStateFlow()
+
+    private val _uploadStatusMessage = MutableStateFlow<String?>(null)
+    val uploadStatusMessage: StateFlow<String?> = _uploadStatusMessage.asStateFlow()
+
     private val _isCheckingUpdate = MutableStateFlow(false)
     val isCheckingUpdate: StateFlow<Boolean> = _isCheckingUpdate.asStateFlow()
 
@@ -395,6 +401,23 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
                 } catch (e: Throwable) {
                     Toast.makeText(getApplication(), "Failed to copy: ${e.message}", Toast.LENGTH_SHORT).show()
                 }
+            }
+        }
+    }
+
+    fun uploadDiagnosticsReport(userNote: String = "") {
+        if (_isUploadingReport.value) return
+        viewModelScope.launch {
+            _isUploadingReport.value = true
+            _uploadStatusMessage.value = "Uploading report to cloud..."
+            val result = DiagnosticsManager.uploadReportToCloud(getApplication(), userNote)
+            _isUploadingReport.value = false
+            result.onSuccess { msg ->
+                _uploadStatusMessage.value = "✅ $msg — Tell assistant in chat you sent it!"
+                Toast.makeText(getApplication(), "$msg — Tell assistant you sent it!", Toast.LENGTH_LONG).show()
+            }.onFailure { err ->
+                _uploadStatusMessage.value = "❌ Upload failed: ${err.message}"
+                Toast.makeText(getApplication(), "Upload failed: ${err.message}", Toast.LENGTH_LONG).show()
             }
         }
     }

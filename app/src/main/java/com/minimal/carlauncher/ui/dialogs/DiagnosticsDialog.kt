@@ -24,6 +24,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.CloudUpload
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Memory
 import androidx.compose.material.icons.filled.PlayArrow
@@ -33,9 +34,12 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -78,10 +82,13 @@ fun DiagnosticsDialog(
     if (!isOpen) return
 
     val context = LocalContext.current
+    val isUploading by viewModel.isUploadingReport.collectAsState()
+    val uploadStatus by viewModel.uploadStatusMessage.collectAsState()
 
     var selectedTab by remember { mutableIntStateOf(0) }
     var refreshCounter by remember { mutableIntStateOf(0) }
     var isLoading by remember { mutableStateOf(true) }
+    var feedbackNote by remember { mutableStateOf("") }
 
     var sysInfo by remember { mutableStateOf<SystemDiagnosticInfo?>(null) }
     var allPackages by remember { mutableStateOf<List<PackageDiagnosticInfo>>(emptyList()) }
@@ -174,6 +181,30 @@ fun DiagnosticsDialog(
                         }
 
                         Button(
+                            onClick = { viewModel.uploadDiagnosticsReport(feedbackNote) },
+                            enabled = !isUploading,
+                            colors = ButtonDefaults.buttonColors(containerColor = AccentGreen),
+                            shape = RoundedCornerShape(10.dp),
+                            modifier = Modifier.height(34.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.CloudUpload,
+                                contentDescription = null,
+                                tint = Color.Black,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = if (isUploading) "Uploading..." else "Upload to Cloud",
+                                color = Color.Black,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.width(8.dp))
+
+                        Button(
                             onClick = { viewModel.copyDiagnosticsReport() },
                             colors = ButtonDefaults.buttonColors(containerColor = AccentCyan),
                             shape = RoundedCornerShape(10.dp),
@@ -232,7 +263,59 @@ fun DiagnosticsDialog(
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(10.dp))
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    // 1b. Optional Feedback Note + Upload Status Row
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        OutlinedTextField(
+                            value = feedbackNote,
+                            onValueChange = { feedbackNote = it },
+                            placeholder = {
+                                Text(
+                                    text = "Optional note / feedback (e.g. which app opened your radio)… then tap 'Upload to Cloud'",
+                                    fontSize = 12.sp,
+                                    color = TextMuted
+                                )
+                            },
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = AccentCyan,
+                                unfocusedBorderColor = CarBorder,
+                                focusedContainerColor = CarBg,
+                                unfocusedContainerColor = CarBg,
+                                focusedTextColor = TextPrimary,
+                                unfocusedTextColor = TextPrimary
+                            ),
+                            shape = RoundedCornerShape(10.dp),
+                            singleLine = true,
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(48.dp)
+                        )
+
+                        if (uploadStatus != null) {
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .background(CarBg)
+                                    .border(1.dp, AccentGreen.copy(alpha = 0.6f), RoundedCornerShape(10.dp))
+                                    .padding(horizontal = 12.dp, vertical = 10.dp)
+                            ) {
+                                Text(
+                                    text = uploadStatus!!,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = AccentGreen,
+                                    maxLines = 1
+                                )
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
 
                     // 2. Tab Selector Row
                     Row(

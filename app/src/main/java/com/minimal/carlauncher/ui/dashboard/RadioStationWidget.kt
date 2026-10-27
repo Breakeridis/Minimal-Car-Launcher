@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CloudUpload
 import androidx.compose.material.icons.filled.Memory
 import androidx.compose.material.icons.filled.Radio
 import androidx.compose.material3.Icon
@@ -42,17 +43,19 @@ import com.minimal.carlauncher.ui.theme.CarSurface
 import com.minimal.carlauncher.ui.theme.CarSurfaceVariant
 import com.minimal.carlauncher.ui.theme.TextMuted
 import com.minimal.carlauncher.ui.theme.TextPrimary
-import com.minimal.carlauncher.ui.theme.TextSecondary
 
 /**
  * Lightweight Head Unit & Radio Inspector Card placed in the left column slot.
- * Displays instant hardware summary (Model, Board/SoC, Detected Radio App) and opens
- * the full Head Unit Hardware & Radio Inspector popup on tap.
+ * Displays instant hardware summary (Model, Board/SoC, Detected Radio App), opens
+ * the full Head Unit Hardware & Radio Inspector popup, and supports 1-tap Cloud Upload.
  */
 @Composable
 fun RadioStationWidget(
     detectedRadioSummary: String?,
+    isUploading: Boolean = false,
+    uploadStatus: String? = null,
     onOpenInspectorPopup: () -> Unit,
+    onUploadReport: () -> Unit = {},
     onLaunchRadio: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -123,7 +126,7 @@ fun RadioStationWidget(
                     )
                     Spacer(modifier = Modifier.width(6.dp))
                     Text(
-                        text = "TAP FOR POPUP",
+                        text = if (isUploading) "UPLOADING..." else "INSPECTOR",
                         fontSize = 9.sp,
                         fontWeight = FontWeight.Bold,
                         color = AccentGreen,
@@ -161,25 +164,25 @@ fun RadioStationWidget(
                 )
                 Spacer(modifier = Modifier.height(2.dp))
                 Text(
-                    text = "Radio App: ${detectedRadioSummary ?: "Scanning..."}",
+                    text = uploadStatus ?: "Radio App: ${detectedRadioSummary ?: "Scanning..."}",
                     fontSize = 11.sp,
                     fontWeight = FontWeight.Medium,
                     fontFamily = FontFamily.Monospace,
-                    color = if (detectedRadioSummary != null) AccentCyan else TextMuted,
+                    color = if (uploadStatus != null) AccentGreen else if (detectedRadioSummary != null) AccentCyan else TextMuted,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis
                 )
             }
 
-            // Bottom Action Buttons: Open Full Inspector Popup + Test Launch Radio
+            // Bottom Action Buttons: All Info Popup + 1-Tap Cloud Upload + Radio App
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Box(
                     modifier = Modifier
-                        .weight(1.4f)
+                        .weight(1.1f)
                         .height(48.dp)
                         .clip(RoundedCornerShape(14.dp))
                         .background(AccentCyan)
@@ -187,17 +190,46 @@ fun RadioStationWidget(
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
-                        text = "SHOW ALL INFO",
-                        fontSize = 13.sp,
+                        text = "ALL INFO",
+                        fontSize = 12.sp,
                         fontWeight = FontWeight.Black,
                         color = Color.Black,
-                        letterSpacing = 0.5.sp
+                        letterSpacing = 0.4.sp
                     )
                 }
 
                 Box(
                     modifier = Modifier
-                        .weight(1f)
+                        .weight(1.15f)
+                        .height(48.dp)
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(AccentGreen)
+                        .clickable(enabled = !isUploading) { onUploadReport() },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.CloudUpload,
+                            contentDescription = "Upload Report",
+                            tint = Color.Black,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Text(
+                            text = if (isUploading) "SENDING..." else "UPLOAD",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Black,
+                            color = Color.Black,
+                            letterSpacing = 0.4.sp
+                        )
+                    }
+                }
+
+                Box(
+                    modifier = Modifier
+                        .weight(0.95f)
                         .height(48.dp)
                         .clip(RoundedCornerShape(14.dp))
                         .background(CarSurfaceVariant)
@@ -207,17 +239,17 @@ fun RadioStationWidget(
                 ) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(5.dp)
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
                         Icon(
                             imageVector = Icons.Default.Radio,
                             contentDescription = "Open Radio",
                             tint = AccentAmber,
-                            modifier = Modifier.size(16.dp)
+                            modifier = Modifier.size(15.dp)
                         )
                         Text(
-                            text = "RADIO APP",
-                            fontSize = 12.sp,
+                            text = "RADIO",
+                            fontSize = 11.sp,
                             fontWeight = FontWeight.Bold,
                             color = AccentAmber
                         )

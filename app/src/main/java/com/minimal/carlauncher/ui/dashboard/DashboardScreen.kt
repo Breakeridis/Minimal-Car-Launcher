@@ -55,6 +55,8 @@ fun DashboardScreen(
     val musicApp by viewModel.musicApp.collectAsState()
     val dvrApp by viewModel.dvrApp.collectAsState()
     val detectedRadioSummary by viewModel.detectedRadioSummary.collectAsState()
+    val isUploadingReport by viewModel.isUploadingReport.collectAsState()
+    val uploadStatusMessage by viewModel.uploadStatusMessage.collectAsState()
     val isDarkMode by viewModel.isDarkMode.collectAsState()
 
     // Dialog States
@@ -108,7 +110,10 @@ fun DashboardScreen(
 
                 RadioStationWidget(
                     detectedRadioSummary = detectedRadioSummary,
+                    isUploading = isUploadingReport,
+                    uploadStatus = uploadStatusMessage,
                     onOpenInspectorPopup = { viewModel.openDiagnosticsDialog() },
+                    onUploadReport = { viewModel.uploadDiagnosticsReport() },
                     onLaunchRadio = { viewModel.launchRadio() },
                     modifier = Modifier
                         .fillMaxWidth()
