@@ -106,7 +106,7 @@ fun LeftBottomDock(
             verticalAlignment = Alignment.CenterVertically
         ) {
             pinnedApps.forEach { app ->
-                val imageBitmap = BitmapHelper.safeDrawableToImageBitmap(app.icon, 72, 72)
+                val imageBitmap = app.iconBitmap ?: BitmapHelper.safeDrawableToImageBitmap(app.icon, 72, 72)
                 Box(
                     modifier = Modifier
                         .size(52.dp)

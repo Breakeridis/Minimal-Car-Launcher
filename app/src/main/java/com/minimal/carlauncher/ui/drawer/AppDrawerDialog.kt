@@ -162,7 +162,7 @@ fun AppGridItem(
     onClick: () -> Unit,
     onLongClick: () -> Unit
 ) {
-    val imageBitmap = BitmapHelper.safeDrawableToImageBitmap(app.icon, 96, 96)
+    val imageBitmap = app.iconBitmap ?: BitmapHelper.safeDrawableToImageBitmap(app.icon, 96, 96)
 
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,

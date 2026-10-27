@@ -62,8 +62,7 @@ class MainActivity : ComponentActivity() {
         } catch (e: Exception) {
             e.printStackTrace()
         }
-        viewModel.loadApps()
-        viewModel.refreshRadio()
+        viewModel.loadApps(force = false)
         if (hasLocationPermission()) {
             viewModel.speedometer.startTracking()
         }

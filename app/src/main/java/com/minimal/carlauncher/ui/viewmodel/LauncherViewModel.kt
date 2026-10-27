@@ -7,14 +7,11 @@ import androidx.lifecycle.viewModelScope
 import com.minimal.carlauncher.data.AppInfo
 import com.minimal.carlauncher.data.AppRepository
 import com.minimal.carlauncher.service.DiagnosticsManager
-import com.minimal.carlauncher.service.DiagnosticEvent
 import com.minimal.carlauncher.service.NavigationRoute
 import com.minimal.carlauncher.service.NavigationService
-import com.minimal.carlauncher.service.RadioManager
 import com.minimal.carlauncher.service.SpeedometerManager
 import com.minimal.carlauncher.service.UpdateInfo
 import com.minimal.carlauncher.service.UpdateManager
-import org.osmdroid.util.GeoPoint
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -25,6 +22,8 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import org.osmdroid.util.GeoPoint
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -33,12 +32,7 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
 
     private val repository = AppRepository(application)
     val speedometer = SpeedometerManager(application)
-    val radioManager = RadioManager(application)
     private val updateManager = UpdateManager(application)
-
-    val radioStation: StateFlow<String?> = radioManager.radioStation
-    val isRadioActive: StateFlow<Boolean> = radioManager.isRadioActive
-    val savedRadioStations: StateFlow<List<String>> = radioManager.savedStations
 
     // Applications State
     private val _allApps = MutableStateFlow<List<AppInfo>>(emptyList())
@@ -46,6 +40,9 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
 
     private val _pinnedApps = MutableStateFlow<List<AppInfo>>(emptyList())
     val pinnedApps: StateFlow<List<AppInfo>> = _pinnedApps.asStateFlow()
+
+    private val _detectedRadioSummary = MutableStateFlow<String?>(null)
+    val detectedRadioSummary: StateFlow<String?> = _detectedRadioSummary.asStateFlow()
 
     private val _searchQuery = MutableStateFlow("")
     val searchQuery: StateFlow<String> = _searchQuery.asStateFlow()
@@ -73,8 +70,6 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
     private val _isDarkMode = MutableStateFlow(repository.isDarkMode())
     val isDarkMode: StateFlow<Boolean> = _isDarkMode.asStateFlow()
     val isMapDarkMode: StateFlow<Boolean> = _isDarkMode.asStateFlow()
-
-    private var hasAutoStartedDvr = false
 
     private val _isAppDrawerOpen = MutableStateFlow(false)
     val isAppDrawerOpen: StateFlow<Boolean> = _isAppDrawerOpen.asStateFlow()
@@ -136,10 +131,9 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
     private val _isAboutDialogOpen = MutableStateFlow(false)
     val isAboutDialogOpen: StateFlow<Boolean> = _isAboutDialogOpen.asStateFlow()
 
-    // Diagnostics Dialog State
+    // Head Unit & Radio Inspector Dialog State
     private val _isDiagnosticsDialogOpen = MutableStateFlow(false)
     val isDiagnosticsDialogOpen: StateFlow<Boolean> = _isDiagnosticsDialogOpen.asStateFlow()
-    val diagnosticEvents: StateFlow<List<DiagnosticEvent>> = DiagnosticsManager.events
 
     private val _isCheckingUpdate = MutableStateFlow(false)
     val isCheckingUpdate: StateFlow<Boolean> = _isCheckingUpdate.asStateFlow()
@@ -151,12 +145,12 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
     val updateDownloadProgress: StateFlow<Int?> = _updateDownloadProgress.asStateFlow()
 
     init {
-        loadApps()
+        loadApps(force = true)
         startClockTicker()
-        radioManager.startMonitoring()
     }
 
-    fun loadApps() {
+    fun loadApps(force: Boolean = false) {
+        if (!force && _allApps.value.isNotEmpty()) return
         viewModelScope.launch(Dispatchers.IO) {
             val apps = repository.getInstalledApps()
             val pinned = repository.getPinnedApps(apps)
@@ -165,13 +159,33 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
             val music = repository.resolveMusicApp(apps)
             val dvr = repository.resolveDvrApp(apps)
 
+            val radioApps = apps.filter { it.isRadio && !it.packageName.lowercase().contains("setting") }
+            val radioSummary = if (radioApps.isNotEmpty()) {
+                radioApps.joinToString(", ") { "${it.label} (${it.packageName})" }
+            } else {
+                val pm = getApplication<Application>().packageManager
+                val sysRadio = try {
+                    pm.getInstalledApplications(0).filter { info ->
+                        val p = info.packageName.lowercase()
+                        (p.contains("radio") || p.contains("tuner") || p.contains("mainui") || p.contains("carassist")) &&
+                            !p.contains("setting")
+                    }.map { info ->
+                        val lbl = try { pm.getApplicationLabel(info).toString() } catch (e: Throwable) { info.packageName }
+                        "$lbl (${info.packageName})"
+                    }
+                } catch (e: Throwable) {
+                    emptyList()
+                }
+                if (sysRadio.isNotEmpty()) sysRadio.joinToString(", ") else "Tap 'SHOW ALL INFO' to inspect"
+            }
+
             _allApps.value = apps
             _pinnedApps.value = pinned
             _zlinkApp.value = zlink
             _navigationApp.value = nav
             _musicApp.value = music
             _dvrApp.value = dvr
-            hasAutoStartedDvr = true
+            _detectedRadioSummary.value = radioSummary
         }
     }
 
@@ -208,6 +222,20 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
     fun launchApp(app: AppInfo) {
         repository.launchApp(app)
         closeAppDrawer()
+    }
+
+    fun launchPackageByName(packageName: String) {
+        val matchingApp = _allApps.value.firstOrNull { it.packageName == packageName }
+        val launched = if (matchingApp != null) {
+            repository.launchApp(matchingApp)
+        } else {
+            repository.launchPackage(packageName)
+        }
+        if (launched) {
+            Toast.makeText(getApplication(), "Launched $packageName", Toast.LENGTH_SHORT).show()
+        } else {
+            Toast.makeText(getApplication(), "Could not launch $packageName directly", Toast.LENGTH_SHORT).show()
+        }
     }
 
     // --- Dock Customization ---
@@ -356,20 +384,19 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
     }
 
     fun copyDiagnosticsReport() {
-        DiagnosticsManager.copyReportToClipboard(
-            getApplication(),
-            radioStation.value,
-            isRadioActive.value,
-            savedRadioStations.value
-        )
-    }
-
-    fun clearDiagnosticsLog() {
-        DiagnosticsManager.clearEvents()
-    }
-
-    fun pingRadio() {
-        radioManager.requestRadioInfoPing()
+        viewModelScope.launch(Dispatchers.IO) {
+            val report = DiagnosticsManager.buildFullReport(getApplication())
+            withContext(Dispatchers.Main) {
+                try {
+                    val clipboard = getApplication<Application>().getSystemService(android.content.Context.CLIPBOARD_SERVICE) as? android.content.ClipboardManager
+                    val clip = android.content.ClipData.newPlainText("Head Unit Info Report", report)
+                    clipboard?.setPrimaryClip(clip)
+                    Toast.makeText(getApplication(), "Head Unit Info copied to clipboard!", Toast.LENGTH_SHORT).show()
+                } catch (e: Throwable) {
+                    Toast.makeText(getApplication(), "Failed to copy: ${e.message}", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
     }
 
     fun checkForUpdates(isManualCheck: Boolean = true) {
@@ -503,9 +530,8 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
     }
 
     fun launchRadio() {
-        radioManager.notifyNwdRadioAudioActive()
         if (!repository.launchRadioApp(_allApps.value)) {
-            openAppDrawer()
+            openDiagnosticsDialog()
         }
     }
 
@@ -548,39 +574,8 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
         toggleDarkMode()
     }
 
-    fun refreshRadio() {
-        radioManager.readCurrentSettingsFrequency()
-        radioManager.requestRadioInfoPing()
-    }
-
-    fun tunePreviousStation() {
-        radioManager.tunePreviousStation()
-    }
-
-    fun tuneNextStation() {
-        radioManager.tuneNextStation()
-    }
-
-    fun tuneToSavedStation(station: String, index: Int) {
-        radioManager.tuneToStation(station, index)
-    }
-
-    fun saveCurrentStationToPreset(index: Int) {
-        val current = radioStation.value
-        if (!current.isNullOrBlank()) {
-            radioManager.savePreset(index, current)
-        }
-    }
-
-    fun showRadioDiagnostic() {
-        val info = radioManager.getRadioDiagnosticInfo()
-        Toast.makeText(getApplication(), info, Toast.LENGTH_LONG).show()
-        openDiagnosticsDialog()
-    }
-
     override fun onCleared() {
         super.onCleared()
         speedometer.stopTracking()
-        radioManager.stopMonitoring()
     }
 }

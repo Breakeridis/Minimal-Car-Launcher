@@ -1,277 +1,347 @@
 package com.minimal.carlauncher.service
 
+import android.app.ActivityManager
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
-import android.content.Intent
 import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
 import android.os.Build
-import android.os.Bundle
 import android.provider.Settings
 import android.widget.Toast
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
+import java.io.BufferedReader
+import java.io.File
+import java.io.InputStreamReader
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
-import java.util.concurrent.atomic.AtomicLong
-
-enum class DiagnosticEventType {
-    INCOMING_INTENT,
-    OUTGOING_INTENT,
-    SETTINGS_CHANGE,
-    RADIO_LOG,
-    SYSTEM_EVENT
-}
-
-data class DiagnosticEvent(
-    val id: Long,
-    val timestamp: String,
-    val type: DiagnosticEventType,
-    val action: String,
-    val target: String?,
-    val summary: String,
-    val details: String
-)
+import java.util.zip.ZipFile
 
 data class PackageDiagnosticInfo(
     val label: String,
     val packageName: String,
+    val apkPath: String,
+    val sharedUserId: String,
     val isSystem: Boolean,
+    val isRadioCandidate: Boolean,
     val versionName: String,
     val versionCode: Long,
+    val activities: List<String>,
     val receivers: List<String>,
     val services: List<String>,
-    val manifestActions: List<String> = emptyList(),
-    val codeActions: List<String> = emptyList(),
-    val codeKeys: List<String> = emptyList()
+    val providers: List<String>,
+    val manifestActions: List<String> = emptyList()
 )
 
 data class SystemDiagnosticInfo(
     val manufacturer: String,
     val model: String,
     val brand: String,
+    val device: String,
+    val product: String,
     val board: String,
     val hardware: String,
-    val product: String,
+    val platform: String,
+    val cpuHardware: String,
+    val cpuModel: String,
+    val cpuCores: Int,
+    val supportedAbis: String,
+    val ramSummary: String,
+    val kernelVersion: String,
     val androidVersion: String,
     val apiLevel: Int,
     val buildDisplay: String,
     val fingerprint: String,
-    val screenMetrics: String
+    val screenMetrics: String,
+    val mcuAndVendorProps: List<Pair<String, String>>
 )
 
 object DiagnosticsManager {
-    private const val MAX_EVENTS = 60
-    private val idCounter = AtomicLong(1)
-    private val timeFormat = SimpleDateFormat("HH:mm:ss.SSS", Locale.US)
 
-    private val eventHistory = ArrayDeque<DiagnosticEvent>()
-    private val eventLock = Any()
-
-    private val _events = MutableStateFlow<List<DiagnosticEvent>>(emptyList())
-    val events: StateFlow<List<DiagnosticEvent>> = _events.asStateFlow()
-
-    fun logIntent(intent: Intent, isIncoming: Boolean) {
-        val action = intent.action ?: "(no action)"
-        val component = intent.component?.flattenToShortString() ?: intent.`package`
-        val time = timeFormat.format(Date())
-        val type = if (isIncoming) DiagnosticEventType.INCOMING_INTENT else DiagnosticEventType.OUTGOING_INTENT
-
-        val extras = intent.extras
-        val keysCount = extras?.size() ?: 0
-        val summary = if (keysCount > 0) "$keysCount extras" else "No extras"
-
-        val details = buildString {
-            append("Action: $action\n")
-            if (component != null) append("Target: $component\n")
-            val dataStr = intent.dataString
-            if (dataStr != null) append("Data: $dataStr\n")
-            val categories = intent.categories
-            if (!categories.isNullOrEmpty()) append("Categories: ${categories.joinToString()}\n")
-            append("Flags: 0x${Integer.toHexString(intent.flags)}\n")
-
-            if (extras != null && !extras.isEmpty) {
-                append("Extras ($keysCount):\n")
-                formatBundle(extras, this, "  ")
-            }
-        }.trimEnd()
-
-        addEvent(DiagnosticEvent(
-            id = idCounter.getAndIncrement(),
-            timestamp = time,
-            type = type,
-            action = action,
-            target = component,
-            summary = summary,
-            details = details
-        ))
-    }
-
-    fun logSettingsChange(uri: String, key: String? = null, value: String? = null) {
-        val time = timeFormat.format(Date())
-        val action = key ?: uri
-        val summary = if (value != null) "= $value" else "URI changed"
-        val details = "URI: $uri\nKey: ${key ?: "(all)"}\nValue: ${value ?: "(unknown or modified)"}"
-
-        addEvent(DiagnosticEvent(
-            id = idCounter.getAndIncrement(),
-            timestamp = time,
-            type = DiagnosticEventType.SETTINGS_CHANGE,
-            action = action,
-            target = "Settings.System/Global",
-            summary = summary,
-            details = details
-        ))
-    }
-
-    fun logRadioAction(action: String, message: String) {
-        val time = timeFormat.format(Date())
-        addEvent(DiagnosticEvent(
-            id = idCounter.getAndIncrement(),
-            timestamp = time,
-            type = DiagnosticEventType.RADIO_LOG,
-            action = action,
-            target = null,
-            summary = message.take(40),
-            details = message
-        ))
-    }
-
-    fun logSystemEvent(action: String, message: String) {
-        val time = timeFormat.format(Date())
-        addEvent(DiagnosticEvent(
-            id = idCounter.getAndIncrement(),
-            timestamp = time,
-            type = DiagnosticEventType.SYSTEM_EVENT,
-            action = action,
-            target = null,
-            summary = message.take(40),
-            details = message
-        ))
-    }
-
-    private fun addEvent(event: DiagnosticEvent) {
-        synchronized(eventLock) {
-            if (eventHistory.size >= MAX_EVENTS) {
-                eventHistory.removeFirst()
-            }
-            eventHistory.addLast(event)
-            _events.value = eventHistory.toList().reversed()
+    private fun readSystemProperty(key: String): String {
+        return try {
+            val clazz = Class.forName("android.os.SystemProperties")
+            val getter = clazz.getMethod("get", String::class.java, String::class.java)
+            (getter.invoke(null, key, "") as? String)?.trim().orEmpty()
+        } catch (e: Throwable) {
+            ""
         }
     }
 
-    fun clearEvents() {
-        synchronized(eventLock) {
-            eventHistory.clear()
-            _events.value = emptyList()
-        }
-    }
-
-    private fun formatBundle(bundle: Bundle, sb: StringBuilder, indent: String) {
-        val keys = try { bundle.keySet() } catch (e: Throwable) { return }
-        for (k in keys) {
-            try {
-                val v = bundle.get(k)
-                if (v == null) {
-                    sb.append("$indent• $k: null\n")
-                    continue
-                }
-                val typeName = v.javaClass.simpleName
-                val repr = when (v) {
-                    is ByteArray -> {
-                        val hex = v.take(16).joinToString(" ") { "%02X".format(it) }
-                        val ascii = try {
-                            val str = String(v, Charsets.UTF_8).filter { it.isLetterOrDigit() || it in " .-" }
-                            if (str.isNotBlank()) " | ascii: '$str'" else ""
-                        } catch (e: Throwable) { "" }
-                        "ByteArray[${v.size}] hex: [$hex]$ascii"
+    private fun parseCpuInfo(): Triple<String, String, Int> {
+        var hardware = ""
+        var modelName = ""
+        var processorCount = 0
+        try {
+            val file = File("/proc/cpuinfo")
+            if (file.exists() && file.canRead()) {
+                file.forEachLine { line ->
+                    val parts = line.split(":", limit = 2)
+                    if (parts.size == 2) {
+                        val k = parts[0].trim().lowercase()
+                        val v = parts[1].trim()
+                        when (k) {
+                            "hardware" -> if (hardware.isEmpty()) hardware = v
+                            "model name", "processor", "cpu model" -> {
+                                if (k == "processor" && v.all { it.isDigit() }) {
+                                    processorCount++
+                                } else if (modelName.isEmpty() && v.isNotEmpty()) {
+                                    modelName = v
+                                }
+                            }
+                        }
                     }
-                    is IntArray -> "IntArray[${v.size}] values: ${v.take(16).joinToString(", ")}"
-                    is LongArray -> "LongArray[${v.size}] values: ${v.take(16).joinToString(", ")}"
-                    is Bundle -> {
-                        sb.append("$indent• $k: (Bundle)\n")
-                        formatBundle(v, sb, "$indent    ")
-                        continue
-                    }
-                    else -> v.toString()
                 }
-                sb.append("$indent• $k: ($typeName) = $repr\n")
-            } catch (e: Throwable) {
-                sb.append("$indent• $k: error reading extra (${e.message})\n")
+            }
+        } catch (e: Throwable) {
+            // Ignore
+        }
+        val cores = if (processorCount > 0) processorCount else Runtime.getRuntime().availableProcessors()
+        return Triple(
+            hardware.ifEmpty { Build.HARDWARE ?: "Unknown" },
+            modelName.ifEmpty { Build.SUPPORTED_ABIS.firstOrNull() ?: "ARM" },
+            cores
+        )
+    }
+
+    private fun readKernelVersion(): String {
+        return try {
+            val file = File("/proc/version")
+            if (file.exists() && file.canRead()) {
+                file.bufferedReader().use { it.readLine()?.trim().orEmpty() }
+            } else {
+                System.getProperty("os.version") ?: "Unknown"
+            }
+        } catch (e: Throwable) {
+            System.getProperty("os.version") ?: "Unknown"
+        }
+    }
+
+    private fun readMcuAndVendorProps(): List<Pair<String, String>> {
+        val result = mutableListOf<Pair<String, String>>()
+        val seenKeys = HashSet<String>()
+
+        // 1. Check high-priority head unit & motherboard keys directly via SystemProperties
+        val priorityKeys = listOf(
+            "ro.board.platform",
+            "ro.product.board",
+            "ro.hardware",
+            "ro.arch",
+            "ro.soc.manufacturer",
+            "ro.soc.model",
+            "ro.product.device",
+            "ro.product.name",
+            "ro.product.model",
+            "ro.product.brand",
+            "ro.product.manufacturer",
+            "ro.build.product",
+            "ro.build.description",
+            "ro.build.display.id",
+            "ro.build.flavor",
+            "ro.build.characteristics",
+            "ro.mcu.version",
+            "sys.mcu.version",
+            "persist.sys.mcu.version",
+            "ro.build.mcu.version",
+            "ro.nwd.version",
+            "ro.nwd.mcu.version",
+            "persist.sys.nwd.radio.freq",
+            "ro.qf.version",
+            "ro.fyt.platform",
+            "ro.topway.platform",
+            "ro.syu.version",
+            "ro.ts.version",
+            "ro.forfan.version",
+            "ro.xyauto.version",
+            "ro.custom.build.version"
+        )
+        for (k in priorityKeys) {
+            val v = readSystemProperty(k)
+            if (v.isNotEmpty() && seenKeys.add(k)) {
+                result.add(k to v)
             }
         }
+
+        // 2. Run `getprop` once to catch any vendor-specific MCU / headunit / radio properties
+        try {
+            val proc = Runtime.getRuntime().exec("getprop")
+            val reader = BufferedReader(InputStreamReader(proc.inputStream))
+            val keywords = listOf(
+                "mcu", "nwd", "qf", "syu", "fyt", "topway", "ts.", "forfan", "xyauto",
+                "allwinner", "softwinner", "sunxi", "t507", "a133", "k2401", "junsun",
+                "radio", "tuner", "carkit", "car.", "platform", "board", "hardware",
+                "soc", "customer", "project", "custom"
+            )
+            var line: String? = reader.readLine()
+            while (line != null) {
+                val trimmed = line.trim()
+                if (trimmed.startsWith("[") && trimmed.endsWith("]")) {
+                    val sep = trimmed.indexOf("]: [")
+                    if (sep > 1) {
+                        val key = trimmed.substring(1, sep)
+                        val value = trimmed.substring(sep + 4, trimmed.length - 1).trim()
+                        val lowerKey = key.lowercase()
+                        val lowerVal = value.lowercase()
+                        if (value.isNotEmpty() && !seenKeys.contains(key)) {
+                            if (keywords.any { lowerKey.contains(it) || lowerVal.contains(it) }) {
+                                seenKeys.add(key)
+                                result.add(key to value)
+                            }
+                        }
+                    }
+                }
+                line = reader.readLine()
+            }
+            reader.close()
+        } catch (e: Throwable) {
+            // Ignore if getprop is restricted
+        }
+
+        return result
     }
 
     fun getSystemInfo(context: Context): SystemDiagnosticInfo {
         val dm = context.resources.displayMetrics
         val screen = "${dm.widthPixels}x${dm.heightPixels} (${dm.densityDpi} dpi, ${dm.density}x)"
+        val (cpuHw, cpuMod, cores) = parseCpuInfo()
+        val platform = readSystemProperty("ro.board.platform")
+            .ifEmpty { readSystemProperty("ro.product.board") }
+            .ifEmpty { Build.BOARD ?: "Unknown" }
+
+        val ramSummary = try {
+            val am = context.getSystemService(Context.ACTIVITY_SERVICE) as? ActivityManager
+            val memInfo = ActivityManager.MemoryInfo()
+            am?.getMemoryInfo(memInfo)
+            if (memInfo.totalMem > 0) {
+                val totalGb = memInfo.totalMem.toDouble() / (1024.0 * 1024.0 * 1024.0)
+                val availGb = memInfo.availMem.toDouble() / (1024.0 * 1024.0 * 1024.0)
+                String.format(Locale.US, "%.2f GB Total (%.2f GB Free)", totalGb, availGb)
+            } else {
+                "Unknown"
+            }
+        } catch (e: Throwable) {
+            "Unknown"
+        }
+
         return SystemDiagnosticInfo(
             manufacturer = Build.MANUFACTURER ?: "Unknown",
             model = Build.MODEL ?: "Unknown",
             brand = Build.BRAND ?: "Unknown",
+            device = Build.DEVICE ?: "Unknown",
+            product = Build.PRODUCT ?: "Unknown",
             board = Build.BOARD ?: "Unknown",
             hardware = Build.HARDWARE ?: "Unknown",
-            product = Build.PRODUCT ?: "Unknown",
+            platform = platform,
+            cpuHardware = cpuHw,
+            cpuModel = cpuMod,
+            cpuCores = cores,
+            supportedAbis = Build.SUPPORTED_ABIS?.joinToString(", ") ?: "Unknown",
+            ramSummary = ramSummary,
+            kernelVersion = readKernelVersion(),
             androidVersion = Build.VERSION.RELEASE ?: "Unknown",
             apiLevel = Build.VERSION.SDK_INT,
             buildDisplay = Build.DISPLAY ?: "Unknown",
             fingerprint = Build.FINGERPRINT ?: "Unknown",
-            screenMetrics = screen
+            screenMetrics = screen,
+            mcuAndVendorProps = readMcuAndVendorProps()
         )
     }
 
-    fun getInstalledRadioPackages(context: Context): List<PackageDiagnosticInfo> {
+    /**
+     * Lightweight extraction of `<action android:name="..." />` from an APK's compiled AndroidManifest.xml.
+     * Takes < 1ms per APK because AndroidManifest.xml is only a few kilobytes.
+     */
+    private fun extractManifestActions(apkPath: String): List<String> {
+        if (apkPath.isBlank()) return emptyList()
+        val file = File(apkPath)
+        if (!file.exists() || !file.canRead()) return emptyList()
+        return try {
+            val xmlBytes = ZipFile(file).use { zip ->
+                val entry = zip.getEntry("AndroidManifest.xml") ?: return emptyList()
+                zip.getInputStream(entry).use { it.readBytes() }
+            }
+            val elements = BinaryXml.parse(xmlBytes)
+            val actions = LinkedHashSet<String>()
+            for (el in elements) {
+                if (el.tag == "action") {
+                    val name = el.attrs["name"]?.trim().orEmpty()
+                    if (name.isNotEmpty() && !name.startsWith("android.intent.action.MAIN") && !name.startsWith("android.intent.action.VIEW")) {
+                        actions.add(name)
+                    }
+                }
+            }
+            actions.toList()
+        } catch (e: Throwable) {
+            emptyList()
+        }
+    }
+
+    /**
+     * Scans installed packages on the head unit and returns detailed info on Radio candidates
+     * as well as vendor/automotive system packages.
+     */
+    fun getInstalledPackagesInfo(context: Context): List<PackageDiagnosticInfo> {
         val pm = context.packageManager
         val results = mutableListOf<PackageDiagnosticInfo>()
 
-        val candidateKeywords = listOf("radio", "tuner", "nwd", "qf", "syu", "microntek", "allwinner", "carkit")
-        val candidatePkgs = try {
-            val installed = pm.getInstalledApplications(0)
-            installed.filter { app ->
-                val lower = app.packageName.lowercase()
-                candidateKeywords.any { lower.contains(it) }
-            }
+        val flags = PackageManager.GET_ACTIVITIES or
+            PackageManager.GET_RECEIVERS or
+            PackageManager.GET_SERVICES or
+            PackageManager.GET_PROVIDERS
+
+        val packages = try {
+            @Suppress("DEPRECATION")
+            pm.getInstalledPackages(flags)
         } catch (e: Throwable) {
             emptyList()
         }
 
-        // Also check explicit known package names
-        val explicitPackages = listOf(
-            "com.nwd.radio",
-            "com.nwd.link.radio",
-            "com.qf.radio",
-            "com.syu.radio",
-            "com.microntek.radio",
-            "com.allwinner.radio",
-            "com.softwinner.radio",
-            "com.ts.MainUI",
-            "com.ts.main.radio",
-            "com.ts.radio",
-            "com.forfan.carassist",
-            "com.forfan.radio",
-            "com.yecon.fmradio",
-            "com.android.fmradio",
-            "com.mediatek.fmradio",
-            "com.chaochuang.radio",
-            "com.navimods.radio"
+        val radioKeywords = listOf(
+            "radio", "fmradio", "tuner", "fmapplication", "mainui", "carassist"
+        )
+        val vendorKeywords = listOf(
+            "nwd", "qf", "syu", "ts.", "forfan", "xyauto", "microntek",
+            "yecon", "allwinner", "softwinner", "carkit", "autochips",
+            "topway", "fyt", "chaochuang", "navimods", "car"
         )
 
-        val uniquePkgs = (candidatePkgs.map { it.packageName } + explicitPackages).distinct()
-
-        for (pkg in uniquePkgs) {
+        for (pkgInfo in packages) {
             try {
-                val pkgInfo = pm.getPackageInfo(
-                    pkg,
-                    PackageManager.GET_RECEIVERS or PackageManager.GET_SERVICES
-                )
+                val pkg = pkgInfo.packageName ?: continue
+                if (pkg == context.packageName) continue
                 val appInfo = pkgInfo.applicationInfo ?: continue
-                val label = try { pm.getApplicationLabel(appInfo).toString() } catch (e: Throwable) { pkg }
+
+                val label = try {
+                    pm.getApplicationLabel(appInfo).toString()
+                } catch (e: Throwable) {
+                    pkg
+                }
+                val apkPath = appInfo.sourceDir ?: ""
                 val isSystem = (appInfo.flags and ApplicationInfo.FLAG_SYSTEM) != 0
-                val receivers = pkgInfo.receivers?.map { it.name.substringAfterLast('.') } ?: emptyList()
-                val services = pkgInfo.services?.map { it.name.substringAfterLast('.') } ?: emptyList()
+
+                val activities = pkgInfo.activities?.mapNotNull { it.name } ?: emptyList()
+                val receivers = pkgInfo.receivers?.mapNotNull { it.name } ?: emptyList()
+                val services = pkgInfo.services?.mapNotNull { it.name } ?: emptyList()
+                val providers = pkgInfo.providers?.mapNotNull { it.authority } ?: emptyList()
+
+                val lowerPkg = pkg.lowercase()
+                val lowerLabel = label.lowercase()
+                val lowerPath = apkPath.lowercase()
+
+                val hasRadioComponent = activities.any { it.lowercase().contains("radio") || it.lowercase().contains("fm") } ||
+                    services.any { it.lowercase().contains("radio") || it.lowercase().contains("fm") } ||
+                    receivers.any { it.lowercase().contains("radio") || it.lowercase().contains("fm") }
+
+                val isRadioCandidate = radioKeywords.any {
+                    lowerPkg.contains(it) || lowerLabel.contains(it) || lowerPath.contains(it)
+                } || hasRadioComponent
+
+                val isVendorOrLaunchable = isRadioCandidate ||
+                    vendorKeywords.any { lowerPkg.contains(it) || lowerPath.contains(it) } ||
+                    pm.getLaunchIntentForPackage(pkg) != null
+
+                if (!isVendorOrLaunchable) continue
+
                 val vCode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
                     pkgInfo.longVersionCode
                 } else {
@@ -279,160 +349,176 @@ object DiagnosticsManager {
                     pkgInfo.versionCode.toLong()
                 }
 
-                val apkAnalysis = RadioApkAnalyzer.analyzePackage(context, pkg)
+                val manifestActions = if (isRadioCandidate) {
+                    extractManifestActions(apkPath)
+                } else {
+                    emptyList()
+                }
 
-                results.add(PackageDiagnosticInfo(
-                    label = label,
-                    packageName = pkg,
-                    isSystem = isSystem,
-                    versionName = pkgInfo.versionName ?: "N/A",
-                    versionCode = vCode,
-                    receivers = receivers,
-                    services = services,
-                    manifestActions = apkAnalysis?.let { (it.receiverActions + it.serviceActions).distinct() } ?: emptyList(),
-                    codeActions = apkAnalysis?.codeActions ?: emptyList(),
-                    codeKeys = apkAnalysis?.codeKeys ?: emptyList()
-                ))
+                results.add(
+                    PackageDiagnosticInfo(
+                        label = label,
+                        packageName = pkg,
+                        apkPath = apkPath,
+                        sharedUserId = pkgInfo.sharedUserId ?: "",
+                        isSystem = isSystem,
+                        isRadioCandidate = isRadioCandidate,
+                        versionName = pkgInfo.versionName ?: "N/A",
+                        versionCode = vCode,
+                        activities = activities,
+                        receivers = receivers,
+                        services = services,
+                        providers = providers,
+                        manifestActions = manifestActions
+                    )
+                )
             } catch (e: Throwable) {
-                // Package not installed
+                // Ignore individual package failure
             }
         }
 
-        return results.sortedWith(compareByDescending<PackageDiagnosticInfo> { it.isSystem }.thenBy { it.packageName })
+        return results.sortedWith(
+            compareByDescending<PackageDiagnosticInfo> { it.isRadioCandidate }
+                .thenByDescending { it.isSystem }
+                .thenBy { it.label.lowercase() }
+        )
     }
 
+    /**
+     * Scans Settings.System and Settings.Global on-demand for any keys related to radio, frequency, MCU, or audio.
+     */
     fun getAutomotiveSettings(context: Context): List<Pair<String, String>> {
         val resolver = context.contentResolver
-        val keys = listOf(
-            "nwd_radio_cur_freq",
-            "radio_cur_freq",
-            "cur_freq",
-            "curr_freq",
-            "curfreq",
-            "current_freq",
-            "radio_freq",
-            "radio_station",
-            "radio_band",
-            "radio_channel",
-            "radio_power",
-            "radio_state",
-            "radio_play",
-            "radio_status",
-            "qf_radio_freq",
-            "allwinner_radio_freq",
-            "mcu_radio_freq"
-        )
         val list = mutableListOf<Pair<String, String>>()
-        for (k in keys) {
-            val sysVal = try { Settings.System.getString(resolver, k) } catch (e: Throwable) { null }
-            if (!sysVal.isNullOrBlank()) {
-                list.add("System.$k" to sysVal)
-            }
-            val globVal = try { Settings.Global.getString(resolver, k) } catch (e: Throwable) { null }
-            if (!globVal.isNullOrBlank() && globVal != sysVal) {
-                list.add("Global.$k" to globVal)
+        val seen = HashSet<String>()
+
+        val keywords = listOf(
+            "radio", "freq", "fm", "am", "band", "channel", "tuner", "rds",
+            "mcu", "nwd", "qf", "syu", "ts", "forfan", "source", "audio", "car"
+        )
+
+        val tables = listOf(
+            "System" to Settings.System.CONTENT_URI,
+            "Global" to Settings.Global.CONTENT_URI
+        )
+
+        for ((prefix, uri) in tables) {
+            try {
+                resolver.query(uri, arrayOf("name", "value"), null, null, null)?.use { cursor ->
+                    val nameIdx = cursor.getColumnIndex("name")
+                    val valIdx = cursor.getColumnIndex("value")
+                    if (nameIdx >= 0 && valIdx >= 0) {
+                        while (cursor.moveToNext()) {
+                            val name = cursor.getString(nameIdx) ?: continue
+                            val value = cursor.getString(valIdx) ?: continue
+                            val lower = name.lowercase()
+                            if (keywords.any { lower.contains(it) }) {
+                                val fullKey = "$prefix.$name"
+                                if (seen.add(fullKey)) {
+                                    list.add(fullKey to value)
+                                }
+                            }
+                        }
+                    }
+                }
+            } catch (e: Throwable) {
+                // Ignore if cursor query restricted
             }
         }
-        return list
+
+        return list.sortedBy { it.first }
     }
 
-    fun buildFullReport(
-        context: Context,
-        radioStation: String?,
-        isRadioActive: Boolean,
-        presets: List<String>
-    ): String = buildString {
+    fun buildFullReport(context: Context): String = buildString {
         appendLine("==================================================")
-        appendLine("CAR LAUNCHER DIAGNOSTICS REPORT")
+        appendLine("HEAD UNIT HARDWARE, CPU & RADIO INSPECTOR REPORT")
         appendLine("Generated: ${SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US).format(Date())}")
         appendLine("==================================================")
         appendLine()
 
         val sys = getSystemInfo(context)
-        appendLine("### 1. DEVICE & HEAD UNIT HARDWARE")
-        appendLine("- Manufacturer: ${sys.manufacturer}")
-        appendLine("- Model: ${sys.model}")
-        appendLine("- Brand: ${sys.brand}")
-        appendLine("- Board / Hardware: ${sys.board} / ${sys.hardware}")
-        appendLine("- Product: ${sys.product}")
-        appendLine("- Android Version: Android ${sys.androidVersion} (API ${sys.apiLevel})")
-        appendLine("- Display Build ID: ${sys.buildDisplay}")
+        appendLine("### 1. HEAD UNIT HARDWARE, MOTHERBOARD & CPU")
+        appendLine("- Manufacturer / Brand: ${sys.manufacturer} / ${sys.brand}")
+        appendLine("- Model / Product / Device: ${sys.model} / ${sys.product} / ${sys.device}")
+        appendLine("- Motherboard / Board / Hardware: ${sys.board} / ${sys.hardware}")
+        appendLine("- SoC Platform: ${sys.platform}")
+        appendLine("- CPU Hardware (/proc/cpuinfo): ${sys.cpuHardware}")
+        appendLine("- CPU Model / Cores: ${sys.cpuModel} (${sys.cpuCores} cores)")
+        appendLine("- CPU Architectures (ABIs): ${sys.supportedAbis}")
+        appendLine("- Memory (RAM): ${sys.ramSummary}")
+        appendLine("- Kernel Version: ${sys.kernelVersion}")
+        appendLine("- Android OS: Android ${sys.androidVersion} (API ${sys.apiLevel})")
+        appendLine("- Build Display ID: ${sys.buildDisplay}")
         appendLine("- Fingerprint: ${sys.fingerprint}")
         appendLine("- Screen Metrics: ${sys.screenMetrics}")
         appendLine()
 
-        appendLine("### 2. LAUNCHER RADIO STATUS")
-        appendLine("- Current Station: ${radioStation ?: "None / Inactive"}")
-        appendLine("- Active State: ${if (isRadioActive) "Active" else "Idle"}")
-        appendLine("- Saved Presets: ${presets.joinToString(", ")}")
-        appendLine()
-
-        appendLine("### 3. DETECTED AUTOMOTIVE SYSTEM SETTINGS")
-        val settings = getAutomotiveSettings(context)
-        if (settings.isEmpty()) {
-            appendLine("(No known automotive radio keys currently found in Settings.System/Global)")
+        appendLine("### 2. MCU & VENDOR SYSTEM PROPERTIES (${sys.mcuAndVendorProps.size})")
+        if (sys.mcuAndVendorProps.isEmpty()) {
+            appendLine("(None detected)")
         } else {
-            for ((k, v) in settings) {
+            for ((k, v) in sys.mcuAndVendorProps) {
                 appendLine("- $k = $v")
             }
         }
         appendLine()
 
-        appendLine("### 4. INSTALLED RADIO & VENDOR PACKAGES")
-        val pkgs = getInstalledRadioPackages(context)
-        if (pkgs.isEmpty()) {
-            appendLine("(No vendor radio packages detected)")
+        val allPkgs = getInstalledPackagesInfo(context)
+        val radioPkgs = allPkgs.filter { it.isRadioCandidate }
+
+        appendLine("### 3. DETECTED RADIO / TUNER APPS (${radioPkgs.size})")
+        if (radioPkgs.isEmpty()) {
+            appendLine("(No explicit radio packages matched)")
         } else {
-            for (p in pkgs) {
+            for (p in radioPkgs) {
                 appendLine("- **${p.label}** (`${p.packageName}`)")
-                appendLine("  • System App: ${if (p.isSystem) "YES" else "NO"}")
-                appendLine("  • Version: ${p.versionName} (${p.versionCode})")
-                if (p.receivers.isNotEmpty()) {
-                    appendLine("  • Receivers (${p.receivers.size}): ${p.receivers.joinToString(", ")}")
+                appendLine("  • APK Path: ${p.apkPath}")
+                if (p.sharedUserId.isNotEmpty()) appendLine("  • SharedUserId: ${p.sharedUserId}")
+                appendLine("  • Version: ${p.versionName} (${p.versionCode}) | System: ${p.isSystem}")
+                if (p.activities.isNotEmpty()) {
+                    appendLine("  • Activities (${p.activities.size}): ${p.activities.joinToString(", ")}")
                 }
                 if (p.services.isNotEmpty()) {
                     appendLine("  • Services (${p.services.size}): ${p.services.joinToString(", ")}")
                 }
+                if (p.receivers.isNotEmpty()) {
+                    appendLine("  • Receivers (${p.receivers.size}): ${p.receivers.joinToString(", ")}")
+                }
+                if (p.providers.isNotEmpty()) {
+                    appendLine("  • Providers (${p.providers.size}): ${p.providers.joinToString(", ")}")
+                }
                 if (p.manifestActions.isNotEmpty()) {
                     appendLine("  • Manifest Intent Actions (${p.manifestActions.size}): ${p.manifestActions.joinToString(", ")}")
-                }
-                if (p.codeActions.isNotEmpty()) {
-                    appendLine("  • DEX Action Strings (${p.codeActions.size}): ${p.codeActions.joinToString(", ")}")
-                }
-                if (p.codeKeys.isNotEmpty()) {
-                    appendLine("  • DEX Radio Keys (${p.codeKeys.size}): ${p.codeKeys.joinToString(", ")}")
                 }
             }
         }
         appendLine()
 
-        appendLine("### 5. RECENT RADIO & INTENT EVENTS (${_events.value.size})")
-        val currentEvents = _events.value
-        if (currentEvents.isEmpty()) {
-            appendLine("(No events captured yet)")
+        appendLine("### 4. OTHER VENDOR & LAUNCHABLE APPS (${allPkgs.size - radioPkgs.size})")
+        for (p in allPkgs.filter { !it.isRadioCandidate }) {
+            appendLine("- ${p.label} (`${p.packageName}`) [path: ${p.apkPath}]")
+        }
+        appendLine()
+
+        appendLine("### 5. AUTOMOTIVE & RADIO SETTINGS KEYS")
+        val settings = getAutomotiveSettings(context)
+        if (settings.isEmpty()) {
+            appendLine("(No automotive/radio keys found in Settings.System/Global)")
         } else {
-            for (e in currentEvents) {
-                appendLine("--------------------------------------------------")
-                appendLine("[${e.timestamp}] [${e.type}] ${e.action}")
-                if (e.target != null) appendLine("Target: ${e.target}")
-                appendLine(e.details)
+            for ((k, v) in settings) {
+                appendLine("- $k = $v")
             }
         }
         appendLine("==================================================")
     }
 
-    fun copyReportToClipboard(
-        context: Context,
-        radioStation: String?,
-        isRadioActive: Boolean,
-        presets: List<String>
-    ): Boolean {
+    fun copyReportToClipboard(context: Context): Boolean {
         return try {
-            val report = buildFullReport(context, radioStation, isRadioActive, presets)
+            val report = buildFullReport(context)
             val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
-            val clip = ClipData.newPlainText("Car Launcher Diagnostics", report)
+            val clip = ClipData.newPlainText("Head Unit Info Report", report)
             clipboard?.setPrimaryClip(clip)
-            Toast.makeText(context, "Diagnostics report copied to clipboard!", Toast.LENGTH_SHORT).show()
+            Toast.makeText(context, "Head Unit Info copied to clipboard!", Toast.LENGTH_SHORT).show()
             true
         } catch (e: Throwable) {
             Toast.makeText(context, "Failed to copy: ${e.message}", Toast.LENGTH_SHORT).show()

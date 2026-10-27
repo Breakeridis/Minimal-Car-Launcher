@@ -9,6 +9,7 @@ import android.content.pm.ResolveInfo
 import android.net.Uri
 import android.os.Build
 import android.widget.Toast
+import com.minimal.carlauncher.util.BitmapHelper
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
@@ -126,6 +127,7 @@ class AppRepository(private val context: Context) {
                     } catch (e: Throwable) {
                         null
                     }
+                    val iconBitmap = BitmapHelper.safeDrawableToImageBitmap(icon, 84, 84)
 
                     val activityName = activityInfo.name ?: ""
 
@@ -133,16 +135,19 @@ class AppRepository(private val context: Context) {
                     val isNav = isNavPackage(pkg, label)
                     val isMusic = isMusicPackage(pkg, label)
                     val isDvr = isDvrPackage(pkg, label)
+                    val isRadio = isRadioApp(pkg, label, activityName)
 
                     AppInfo(
                         label = label,
                         packageName = pkg,
                         activityName = activityName,
                         icon = icon,
+                        iconBitmap = iconBitmap,
                         isZLink = isZLink,
                         isNavigation = isNav,
                         isMusic = isMusic,
-                        isDvr = isDvr
+                        isDvr = isDvr,
+                        isRadio = isRadio
                     )
                 } catch (e: Throwable) {
                     null

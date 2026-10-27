@@ -54,9 +54,7 @@ fun DashboardScreen(
     val navigationApp by viewModel.navigationApp.collectAsState()
     val musicApp by viewModel.musicApp.collectAsState()
     val dvrApp by viewModel.dvrApp.collectAsState()
-    val radioStation by viewModel.radioStation.collectAsState()
-    val isRadioActive by viewModel.isRadioActive.collectAsState()
-    val savedRadioStations by viewModel.savedRadioStations.collectAsState()
+    val detectedRadioSummary by viewModel.detectedRadioSummary.collectAsState()
     val isDarkMode by viewModel.isDarkMode.collectAsState()
 
     // Dialog States
@@ -109,15 +107,9 @@ fun DashboardScreen(
                 )
 
                 RadioStationWidget(
-                    radioStation = radioStation,
-                    isRadioActive = isRadioActive,
-                    savedStations = savedRadioStations,
-                    onTunePrevious = { viewModel.tunePreviousStation() },
-                    onTuneNext = { viewModel.tuneNextStation() },
-                    onSelectSavedStation = { station, index -> viewModel.tuneToSavedStation(station, index) },
-                    onSaveCurrentStation = { index -> viewModel.saveCurrentStationToPreset(index) },
+                    detectedRadioSummary = detectedRadioSummary,
+                    onOpenInspectorPopup = { viewModel.openDiagnosticsDialog() },
                     onLaunchRadio = { viewModel.launchRadio() },
-                    onShowDiagnostic = { viewModel.showRadioDiagnostic() },
                     modifier = Modifier
                         .fillMaxWidth()
                         .weight(1.48f)

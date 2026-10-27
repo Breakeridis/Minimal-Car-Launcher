@@ -158,7 +158,7 @@ fun AppPickerDialog(
                         modifier = Modifier.fillMaxSize()
                     ) {
                     items(filtered, key = { it.packageName + it.activityName }) { app ->
-                        val imageBitmap = BitmapHelper.safeDrawableToImageBitmap(app.icon, 80, 80)
+                        val imageBitmap = app.iconBitmap ?: BitmapHelper.safeDrawableToImageBitmap(app.icon, 80, 80)
                         Column(
                             horizontalAlignment = Alignment.CenterHorizontally,
                             modifier = Modifier
