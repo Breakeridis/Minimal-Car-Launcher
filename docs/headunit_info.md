@@ -146,6 +146,26 @@ Binding to `Intent("com.nwd.radio.service.ACTION_RADIO_SERVICE").setPackage("com
 - `System.key_arm_fm_scan_state = 0`
 - `System.fm_transmit = 9300`
 
+### F. Verified Working Control Implementation (100% Operational)
+
+The radio integration has been fully tested, verified, and confirmed working on the physical hardware:
+
+1. **Hardware Tuner IPC Binding**:
+   - Explicit binding to `Intent("com.nwd.radio.service.ACTION_RADIO_SERVICE").setPackage("com.nwd.radio.service")` connects reliably on boot and on-demand.
+   - Binder transactions execute directly on the tuner DSP chip without requiring root privileges:
+     - **Seek Up / Down**: Invokes `seek(boolean)` (`TRANSACTION = 3`).
+     - **Direct Frequency Tuning**: Invokes `setCurrentFrequency(int freq, byte band, int index)` (`TRANSACTION = 1`), where FM frequency is passed as integer in 10 kHz increments (e.g., `10250` for 102.50 MHz).
+     - **Save Preset**: Invokes `saveCurrentFrequency(byte index)` (`TRANSACTION = 20`), writing the station to the hardware MCU preset memory.
+2. **Bidirectional State Synchronization**:
+   - The launcher registers a dynamic BroadcastReceiver listening for `com.nwd.action.ACTION_SEND_RADIO_FREQUENCE_NEW` and `com.nwd.action.ACTION_RADIO_STATE`.
+   - Concurrently monitors `Settings.System` keys (`nwd_radio_current_freq`, `nwd_radio_state`, `mcu_current_source`).
+   - Changing stations in the stock Nowada radio app immediately reflects on the launcher widget in real time, and vice versa.
+3. **Audio Routing & Source Switching**:
+   - Activating the tuner or selecting a frequency triggers the hardware MCU to route the I2S FM audio channel (`sys.nwd.audio.channel = FM`, `mcu_current_source = 4`) directly to the car's speakers.
+4. **Preset Bank (Slots 1–6)**:
+   - Single-tap immediately tunes to the preset frequency and highlights the active slot.
+   - Long-press triggers hardware preset storage and persists the value into the widget bank with haptic/visual confirmation.
+
 ---
 
 ## 4. Core NWD Carkit & Vendor System Packages
