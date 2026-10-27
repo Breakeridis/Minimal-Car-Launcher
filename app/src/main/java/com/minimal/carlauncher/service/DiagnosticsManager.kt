@@ -11,14 +11,19 @@ import android.provider.Settings
 import android.util.Base64
 import android.widget.Toast
 import com.minimal.carlauncher.BuildConfig
+import dalvik.system.DexFile
+import dalvik.system.PathClassLoader
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import java.io.BufferedReader
 import java.io.File
 import java.io.InputStreamReader
+import java.lang.reflect.Modifier
 import java.net.HttpURLConnection
 import java.net.URL
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
 import java.security.KeyFactory
 import java.security.SecureRandom
 import java.security.spec.X509EncodedKeySpec
@@ -442,7 +447,228 @@ object DiagnosticsManager {
         return list.sortedBy { it.first }
     }
 
-    fun buildFullReport(context: Context): String = buildString {
+    /**
+     * Targeted, on-demand DEX & ClassLoader inspection for the head unit's radio packages
+     * (`com.nwd.radio`, `com.nwd.radio.service`, `com.nwd.kernel`, and radio classes in `com.android.launcher`).
+     * Only runs when the user manually generates or uploads a diagnostic report.
+     */
+    private fun inspectTargetRadioPackages(context: Context, allPkgs: List<PackageDiagnosticInfo>): String = buildString {
+        val targetPackages = listOf(
+            "com.nwd.radio",
+            "com.nwd.radio.service",
+            "com.nwd.kernel",
+            "com.android.launcher"
+        )
+        val matched = allPkgs.filter { p ->
+            p.packageName in targetPackages || p.isRadioCandidate
+        }.distinctBy { it.packageName }
+
+        for (pkgInfo in matched) {
+            val isLauncherOrKernel = pkgInfo.packageName == "com.android.launcher" || pkgInfo.packageName == "com.nwd.kernel"
+            appendLine("#### Package: `${pkgInfo.packageName}` (${pkgInfo.apkPath})")
+
+            // 1. Enumerate classes, methods, and constant fields via DexFile + PathClassLoader
+            try {
+                val classLoader = try {
+                    val pkgCtx = context.createPackageContext(
+                        pkgInfo.packageName,
+                        Context.CONTEXT_INCLUDE_CODE or Context.CONTEXT_IGNORE_SECURITY
+                    )
+                    pkgCtx.classLoader
+                } catch (e: Throwable) {
+                    PathClassLoader(pkgInfo.apkPath, null, context.classLoader)
+                }
+
+                @Suppress("DEPRECATION")
+                val dexFile = DexFile(pkgInfo.apkPath)
+                val entries = dexFile.entries()
+                val classList = mutableListOf<String>()
+                while (entries.hasMoreElements()) {
+                    val clsName = entries.nextElement() ?: continue
+                    if (clsName.startsWith("android.support.") || clsName.startsWith("androidx.")) continue
+                    if (isLauncherOrKernel) {
+                        val lower = clsName.lowercase()
+                        if (!lower.contains("radio") && !lower.contains("fm") && !lower.contains("mcu") && !lower.contains("carkit")) {
+                            continue
+                        }
+                    }
+                    classList.add(clsName)
+                }
+
+                appendLine("  • Discovered Classes (${classList.size}):")
+                for (clsName in classList.take(80)) {
+                    appendLine("    - `$clsName`")
+                    try {
+                        val cls = Class.forName(clsName, false, classLoader)
+                        // Static string/int constants
+                        val constants = cls.declaredFields.filter { f ->
+                            Modifier.isStatic(f.modifiers) &&
+                                (f.type == String::class.java || f.type == Int::class.javaPrimitiveType) &&
+                                !f.name.startsWith("abc_")
+                        }.take(30)
+                        for (f in constants) {
+                            try {
+                                f.isAccessible = true
+                                val v = f.get(null)
+                                if (v != null) {
+                                    appendLine("      const `${f.name}` = `$v`")
+                                }
+                            } catch (e: Throwable) {
+                                // Ignore
+                            }
+                        }
+
+                        // Declared methods
+                        val methods = cls.declaredMethods.filter { m ->
+                            !m.name.startsWith("access\$")
+                        }.take(45)
+                        for (m in methods) {
+                            val params = m.parameterTypes.joinToString(", ") { it.simpleName }
+                            appendLine("      fun `${m.name}($params): ${m.returnType.simpleName}`")
+                        }
+                    } catch (e: Throwable) {
+                        // Class couldn't be loaded reflectively
+                    }
+                }
+            } catch (e: Throwable) {
+                appendLine("  • DexFile/ClassLoader note: ${e.javaClass.simpleName}: ${e.message}")
+            }
+
+            // 2. Also extract raw DEX string constants from APK or sibling oat/.vdex
+            val dexStrings = extractRawDexStrings(pkgInfo.apkPath, filterRadioOnly = isLauncherOrKernel)
+            if (dexStrings.isNotEmpty()) {
+                appendLine("  • Extracted DEX Action/Key/AIDL Strings (${dexStrings.size}):")
+                for (s in dexStrings.take(120)) {
+                    appendLine("    - `$s`")
+                }
+            }
+            appendLine()
+        }
+    }
+
+    private fun extractRawDexStrings(apkPath: String, filterRadioOnly: Boolean): List<String> {
+        if (apkPath.isBlank()) return emptyList()
+        val apkFile = File(apkPath)
+        val rawBytesList = mutableListOf<ByteArray>()
+
+        // Check classes.dex inside APK
+        if (apkFile.exists() && apkFile.canRead()) {
+            try {
+                ZipFile(apkFile).use { zip ->
+                    val entry = zip.getEntry("classes.dex")
+                    if (entry != null && entry.size in 100..6_000_000) {
+                        rawBytesList.add(zip.getInputStream(entry).use { it.readBytes() })
+                    }
+                }
+            } catch (e: Throwable) {
+                // Ignore
+            }
+        }
+
+        // Check sibling oat/arm/*.vdex or *.odex if classes.dex was stripped
+        if (rawBytesList.isEmpty()) {
+            val parent = apkFile.parentFile
+            if (parent != null) {
+                val baseName = apkFile.nameWithoutExtension
+                val candidateFiles = listOf(
+                    File(parent, "oat/arm/$baseName.vdex"),
+                    File(parent, "oat/arm64/$baseName.vdex"),
+                    File(parent, "oat/arm/$baseName.odex")
+                )
+                for (f in candidateFiles) {
+                    if (f.exists() && f.canRead() && f.length() in 100..8_000_000) {
+                        try {
+                            rawBytesList.add(f.readBytes())
+                        } catch (e: Throwable) {
+                            // Ignore
+                        }
+                    }
+                }
+            }
+        }
+
+        val collected = LinkedHashSet<String>()
+        for (bytes in rawBytesList) {
+            parseDexStringsFromBuffer(bytes, filterRadioOnly, collected)
+        }
+        return collected.toList()
+    }
+
+    private fun parseDexStringsFromBuffer(
+        bytes: ByteArray,
+        filterRadioOnly: Boolean,
+        out: MutableSet<String>
+    ) {
+        // Locate "dex\n03" magic inside buffer (offset 0 for classes.dex, or inside .vdex)
+        var dexOffset = -1
+        for (i in 0..(bytes.size - 112)) {
+            if (bytes[i] == 'd'.code.toByte() &&
+                bytes[i + 1] == 'e'.code.toByte() &&
+                bytes[i + 2] == 'x'.code.toByte() &&
+                bytes[i + 3] == '\n'.code.toByte() &&
+                bytes[i + 4] == '0'.code.toByte() &&
+                bytes[i + 5] == '3'.code.toByte()
+            ) {
+                dexOffset = i
+                break
+            }
+        }
+        if (dexOffset < 0) return
+
+        try {
+            val buf = ByteBuffer.wrap(bytes, dexOffset, bytes.size - dexOffset).order(ByteOrder.LITTLE_ENDIAN)
+            val stringIdsSize = buf.getInt(56)
+            val stringIdsOff = buf.getInt(60)
+            if (stringIdsSize <= 0 || stringIdsSize > 100_000 || stringIdsOff <= 0) return
+
+            for (idx in 0 until stringIdsSize) {
+                val strDataOff = buf.getInt(stringIdsOff + idx * 4)
+                val absOff = dexOffset + strDataOff
+                if (absOff <= dexOffset || absOff >= bytes.size - 2) continue
+
+                // Skip ULEB128 utf16_size
+                var p = absOff
+                while (p < bytes.size && (bytes[p].toInt() and 0x80) != 0) {
+                    p++
+                }
+                p++ // final byte of ULEB128
+                var end = p
+                while (end < bytes.size && bytes[end].toInt() != 0 && (end - p) < 160) {
+                    end++
+                }
+                val len = end - p
+                if (len in 3..140) {
+                    val str = String(bytes, p, len, Charsets.UTF_8).trim()
+                    if (isInterestingRadioDexString(str, filterRadioOnly)) {
+                        out.add(str)
+                    }
+                }
+            }
+        } catch (e: Throwable) {
+            // Ignore malformed DEX offsets
+        }
+    }
+
+    private fun isInterestingRadioDexString(s: String, filterRadioOnly: Boolean): Boolean {
+        if (s.any { it.code < 32 || it.code > 126 }) return false
+        if (s.startsWith("Landroid/") || s.startsWith("Ljava/") || s.startsWith("Ldalvik/") || s.startsWith("Landroidx/")) return false
+        val lower = s.lowercase()
+        val highValueKeywords = listOf(
+            "nwd", "radio", "freq", "band", "seek", "tune", "channel", "preset",
+            "search", "step", "am", "fm", "rds", "psn", "pty", "loc", "stereo",
+            "st", "action", "extra", "service", "aidl", "stub", "binder", "mcu", "carkit"
+        )
+        if (filterRadioOnly) {
+            return lower.contains("radio") || lower.contains("nwd") || lower.contains("freq") || lower.contains("carkit")
+        }
+        return highValueKeywords.any { lower.contains(it) } ||
+            (s.startsWith("L") && s.endsWith(";") && lower.contains("nwd"))
+    }
+
+    fun buildFullReport(
+        context: Context,
+        liveBinderInfo: String = ""
+    ): String = buildString {
         appendLine("==================================================")
         appendLine("HEAD UNIT HARDWARE, CPU & RADIO INSPECTOR REPORT")
         appendLine("Generated: ${SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US).format(Date())}")
@@ -522,6 +748,15 @@ object DiagnosticsManager {
                 appendLine("- $k = $v")
             }
         }
+        appendLine()
+
+        appendLine("### 6. NWD RADIO SERVICE & APK DEEP INSPECTION")
+        if (liveBinderInfo.isNotBlank()) {
+            appendLine("#### Live NwdRadioController Binder State:")
+            appendLine(liveBinderInfo.trim())
+            appendLine()
+        }
+        append(inspectTargetRadioPackages(context, allPkgs))
         appendLine("==================================================")
     }
 
@@ -560,7 +795,8 @@ object DiagnosticsManager {
 
     suspend fun uploadReportToCloud(
         context: Context,
-        userNote: String = ""
+        userNote: String = "",
+        liveBinderInfo: String = ""
     ): Result<String> = withContext(Dispatchers.IO) {
         try {
             val fullReport = buildString {
@@ -569,7 +805,7 @@ object DiagnosticsManager {
                     appendLine(userNote.trim())
                     appendLine()
                 }
-                append(buildFullReport(context))
+                append(buildFullReport(context, liveBinderInfo))
             }
 
             val encryptedPayload = encryptReportPayload(fullReport)

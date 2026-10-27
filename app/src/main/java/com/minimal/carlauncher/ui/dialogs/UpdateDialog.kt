@@ -1,5 +1,6 @@
 package com.minimal.carlauncher.ui.dialogs
 
+import android.os.Build
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -25,10 +26,12 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.CloudUpload
 import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.DirectionsCar
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.LightMode
+import androidx.compose.material.icons.filled.Memory
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.SystemUpdate
 import androidx.compose.material3.Button
@@ -38,13 +41,19 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -72,7 +81,11 @@ fun AboutDialog(
     onInstall: () -> Unit,
     onDismiss: () -> Unit,
     isDarkMode: Boolean = false,
-    onToggleDarkMode: () -> Unit = {}
+    onToggleDarkMode: () -> Unit = {},
+    isUploadingReport: Boolean = false,
+    uploadStatusMessage: String? = null,
+    onUploadReport: (String) -> Unit = {},
+    onOpenSystemInspector: () -> Unit = {}
 ) {
     if (!isOpen) return
 
@@ -464,56 +477,9 @@ fun AboutDialog(
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(12.dp))
-
-                    // 3. Compact Features Section (Optimized for landscape / cockpit readability)
-                    Text(
-                        text = "KEY AUTOMOTIVE FEATURES",
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = TextMuted,
-                        letterSpacing = 0.5.sp
-                    )
-
-                    Spacer(modifier = Modifier.height(6.dp))
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        FeatureChip(
-                            modifier = Modifier.weight(1f),
-                            title = "GPS Speedometer",
-                            desc = "KM/H & MPH"
-                        )
-                        FeatureChip(
-                            modifier = Modifier.weight(1f),
-                            title = "Live Dashcam / DVR",
-                            desc = "Floating frame & auto-start"
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.height(6.dp))
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        FeatureChip(
-                            modifier = Modifier.weight(1f),
-                            title = "Phone Projection",
-                            desc = "ZLink CarPlay / Android Auto"
-                        )
-                        FeatureChip(
-                            modifier = Modifier.weight(1f),
-                            title = "Customizable Dock",
-                            desc = "Long-press to pin or remove"
-                        )
-                    }
-
                     Spacer(modifier = Modifier.height(10.dp))
 
-                    // 4. Cockpit Theme Setting (Day / Night Light Mode Toggle)
+                    // 3. Cockpit Theme Setting (Day / Night Light Mode Toggle)
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -586,7 +552,147 @@ fun AboutDialog(
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(14.dp))
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    // 4. System Info & Encrypted Cloud Diagnostics Card
+                    var userNote by remember { mutableStateOf("") }
+                    val hwBadge = remember {
+                        "${Build.MANUFACTURER ?: ""} ${Build.MODEL ?: "Head Unit"} • Board: ${Build.BOARD ?: "?"} • HW: ${Build.HARDWARE ?: "?"}".trim()
+                    }
+
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(CarSurfaceVariant)
+                            .border(1.dp, CarBorder, RoundedCornerShape(12.dp))
+                            .padding(horizontal = 14.dp, vertical = 10.dp)
+                    ) {
+                        Column(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(36.dp)
+                                            .clip(CircleShape)
+                                            .background(AccentGreen.copy(alpha = 0.15f)),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Memory,
+                                            contentDescription = null,
+                                            tint = AccentGreen,
+                                            modifier = Modifier.size(20.dp)
+                                        )
+                                    }
+                                    Column {
+                                        Text(
+                                            text = "System Info & Cloud Diagnostics",
+                                            fontSize = 13.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = TextPrimary
+                                        )
+                                        Text(
+                                            text = hwBadge,
+                                            fontSize = 10.sp,
+                                            fontFamily = FontFamily.Monospace,
+                                            color = AccentAmber
+                                        )
+                                    }
+                                }
+                            }
+
+                            if (!uploadStatusMessage.isNullOrBlank()) {
+                                Text(
+                                    text = uploadStatusMessage,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = if (uploadStatusMessage.startsWith("❌")) AccentAmber else AccentGreen
+                                )
+                            }
+
+                            OutlinedTextField(
+                                value = userNote,
+                                onValueChange = { userNote = it },
+                                placeholder = {
+                                    Text(
+                                        text = "Optional feedback or note to attach to encrypted report...",
+                                        fontSize = 11.sp,
+                                        color = TextMuted
+                                    )
+                                },
+                                singleLine = true,
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedBorderColor = AccentCyan,
+                                    unfocusedBorderColor = CarBorder,
+                                    focusedTextColor = TextPrimary,
+                                    unfocusedTextColor = TextPrimary
+                                )
+                            )
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Button(
+                                    onClick = { onUploadReport(userNote) },
+                                    enabled = !isUploadingReport,
+                                    colors = ButtonDefaults.buttonColors(containerColor = AccentGreen),
+                                    shape = RoundedCornerShape(10.dp),
+                                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.CloudUpload,
+                                        contentDescription = "Upload Encrypted Report",
+                                        tint = Color.Black,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(
+                                        text = if (isUploadingReport) "Uploading..." else "Upload Encrypted Report",
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color.Black
+                                    )
+                                }
+
+                                OutlinedButton(
+                                    onClick = onOpenSystemInspector,
+                                    shape = RoundedCornerShape(10.dp),
+                                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Info,
+                                        contentDescription = "System Info",
+                                        tint = AccentCyan,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(
+                                        text = "Full System Info",
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = AccentCyan
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
 
                     // 5. Dialog Footer with Close Button
                     Row(
@@ -603,34 +709,6 @@ fun AboutDialog(
                     }
                 }
             }
-        }
-    }
-}
-
-@Composable
-private fun FeatureChip(
-    modifier: Modifier = Modifier,
-    title: String,
-    desc: String
-) {
-    Box(
-        modifier = modifier
-            .clip(RoundedCornerShape(10.dp))
-            .background(CarSurfaceVariant)
-            .padding(horizontal = 10.dp, vertical = 8.dp)
-    ) {
-        Column {
-            Text(
-                text = title,
-                fontSize = 12.sp,
-                fontWeight = FontWeight.SemiBold,
-                color = TextPrimary
-            )
-            Text(
-                text = desc,
-                fontSize = 10.sp,
-                color = TextMuted
-            )
         }
     }
 }

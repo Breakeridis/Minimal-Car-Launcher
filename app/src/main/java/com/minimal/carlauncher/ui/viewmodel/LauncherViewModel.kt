@@ -9,6 +9,7 @@ import com.minimal.carlauncher.data.AppRepository
 import com.minimal.carlauncher.service.DiagnosticsManager
 import com.minimal.carlauncher.service.NavigationRoute
 import com.minimal.carlauncher.service.NavigationService
+import com.minimal.carlauncher.service.NwdRadioController
 import com.minimal.carlauncher.service.SpeedometerManager
 import com.minimal.carlauncher.service.UpdateInfo
 import com.minimal.carlauncher.service.UpdateManager
@@ -32,6 +33,7 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
 
     private val repository = AppRepository(application)
     val speedometer = SpeedometerManager(application)
+    val nwdRadioController = NwdRadioController(application)
     private val updateManager = UpdateManager(application)
 
     // Applications State
@@ -391,7 +393,10 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
 
     fun copyDiagnosticsReport() {
         viewModelScope.launch(Dispatchers.IO) {
-            val report = DiagnosticsManager.buildFullReport(getApplication())
+            val report = DiagnosticsManager.buildFullReport(
+                context = getApplication(),
+                liveBinderInfo = nwdRadioController.getLiveBinderDiagnostics()
+            )
             withContext(Dispatchers.Main) {
                 try {
                     val clipboard = getApplication<Application>().getSystemService(android.content.Context.CLIPBOARD_SERVICE) as? android.content.ClipboardManager
@@ -410,7 +415,11 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
         viewModelScope.launch {
             _isUploadingReport.value = true
             _uploadStatusMessage.value = "Uploading report to cloud..."
-            val result = DiagnosticsManager.uploadReportToCloud(getApplication(), userNote)
+            val result = DiagnosticsManager.uploadReportToCloud(
+                context = getApplication(),
+                userNote = userNote,
+                liveBinderInfo = nwdRadioController.getLiveBinderDiagnostics()
+            )
             _isUploadingReport.value = false
             result.onSuccess { msg ->
                 _uploadStatusMessage.value = "✅ $msg — Tell assistant in chat you sent it!"
@@ -553,9 +562,30 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
     }
 
     fun launchRadio() {
-        if (!repository.launchRadioApp(_allApps.value)) {
-            openDiagnosticsDialog()
+        if (!nwdRadioController.launchNwdRadioApp() && !repository.launchRadioApp(_allApps.value)) {
+            openAboutDialog()
         }
+    }
+
+    fun seekRadioNext() {
+        nwdRadioController.seekNext()
+    }
+
+    fun seekRadioPrev() {
+        nwdRadioController.seekPrev()
+    }
+
+    fun selectRadioPreset(index: Int) {
+        nwdRadioController.selectPreset(index)
+    }
+
+    fun saveRadioPreset(index: Int) {
+        nwdRadioController.saveCurrentToPreset(index)
+        Toast.makeText(
+            getApplication(),
+            "Saved ${String.format(Locale.US, "%.1f", nwdRadioController.frequencyMhz.value)} MHz to P${index + 1}",
+            Toast.LENGTH_SHORT
+        ).show()
     }
 
     fun launchMusic() {
@@ -600,5 +630,6 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
     override fun onCleared() {
         super.onCleared()
         speedometer.stopTracking()
+        nwdRadioController.cleanup()
     }
 }

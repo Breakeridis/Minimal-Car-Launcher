@@ -54,10 +54,15 @@ fun DashboardScreen(
     val navigationApp by viewModel.navigationApp.collectAsState()
     val musicApp by viewModel.musicApp.collectAsState()
     val dvrApp by viewModel.dvrApp.collectAsState()
-    val detectedRadioSummary by viewModel.detectedRadioSummary.collectAsState()
     val isUploadingReport by viewModel.isUploadingReport.collectAsState()
     val uploadStatusMessage by viewModel.uploadStatusMessage.collectAsState()
     val isDarkMode by viewModel.isDarkMode.collectAsState()
+
+    // NWD Radio State
+    val radioFreqMhz by viewModel.nwdRadioController.frequencyMhz.collectAsState()
+    val radioPresets by viewModel.nwdRadioController.presets.collectAsState()
+    val isRadioActive by viewModel.nwdRadioController.isRadioActive.collectAsState()
+    val radioStationInfo by viewModel.nwdRadioController.stationInfo.collectAsState()
 
     // Dialog States
     val selectedDockApp by viewModel.selectedDockAppForAction.collectAsState()
@@ -109,11 +114,14 @@ fun DashboardScreen(
                 )
 
                 RadioStationWidget(
-                    detectedRadioSummary = detectedRadioSummary,
-                    isUploading = isUploadingReport,
-                    uploadStatus = uploadStatusMessage,
-                    onOpenInspectorPopup = { viewModel.openDiagnosticsDialog() },
-                    onUploadReport = { viewModel.uploadDiagnosticsReport() },
+                    frequencyMhz = radioFreqMhz,
+                    presets = radioPresets,
+                    isRadioActive = isRadioActive,
+                    stationInfo = radioStationInfo,
+                    onSeekPrev = { viewModel.seekRadioPrev() },
+                    onSeekNext = { viewModel.seekRadioNext() },
+                    onSelectPreset = { index -> viewModel.selectRadioPreset(index) },
+                    onSavePreset = { index -> viewModel.saveRadioPreset(index) },
                     onLaunchRadio = { viewModel.launchRadio() },
                     modifier = Modifier
                         .fillMaxWidth()
@@ -260,7 +268,7 @@ fun DashboardScreen(
             onDismiss = { viewModel.dismissDrawerActionDialog() }
         )
 
-        // About App & Software Update Dialog
+        // About App, Software Update & System Info Dialog
         AboutDialog(
             isOpen = isAboutDialogOpen,
             currentVersion = currentVersion,
@@ -271,7 +279,11 @@ fun DashboardScreen(
             onInstall = { viewModel.startDownloadAndInstall() },
             onDismiss = { viewModel.dismissAboutDialog() },
             isDarkMode = isDarkMode,
-            onToggleDarkMode = { viewModel.toggleDarkMode() }
+            onToggleDarkMode = { viewModel.toggleDarkMode() },
+            isUploadingReport = isUploadingReport,
+            uploadStatusMessage = uploadStatusMessage,
+            onUploadReport = { note -> viewModel.uploadDiagnosticsReport(note) },
+            onOpenSystemInspector = { viewModel.openDiagnosticsDialog() }
         )
 
         // System & Radio Diagnostics Dialog (Long-press Settings)
