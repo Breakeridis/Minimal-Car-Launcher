@@ -127,8 +127,8 @@ class AppRepository(private val context: Context) {
                     } catch (e: Throwable) {
                         null
                     }
-                    // Pre-cache compact 64x64 ImageBitmap on IO thread and release raw Drawable reference to save RAM
-                    val iconBitmap = BitmapHelper.safeDrawableToImageBitmap(icon, 64, 64)
+                    // Pre-cache compact 84x84 ImageBitmap on IO thread and release raw Drawable reference to save RAM
+                    val iconBitmap = BitmapHelper.safeDrawableToImageBitmap(icon, 84, 84)
 
                     val activityName = activityInfo.name ?: ""
 

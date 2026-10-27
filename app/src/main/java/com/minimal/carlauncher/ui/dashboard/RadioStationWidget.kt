@@ -85,50 +85,51 @@ fun RadioStationWidget(
             .clip(RoundedCornerShape(20.dp))
             .background(cardGradient)
             .border(1.dp, CarBorder.copy(alpha = 0.6f), RoundedCornerShape(20.dp))
-            .padding(horizontal = 14.dp, vertical = 12.dp)
+            .padding(14.dp)
     ) {
         Column(
             horizontalAlignment = Alignment.Start,
-            verticalArrangement = Arrangement.SpaceBetween,
+            verticalArrangement = Arrangement.spacedBy(10.dp),
             modifier = Modifier.fillMaxHeight()
         ) {
-            // 1. Top Header: FM RADIO Title, Live ON AIR / STANDBY Status, and Open App Button
+            // 1. Top Header (40.dp): FM RADIO Title + Status Indicator on Left, Large OPEN button on Right
             Row(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(40.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    modifier = Modifier.clickable { onLaunchRadio() }
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier
+                        .weight(1f)
+                        .clip(RoundedCornerShape(10.dp))
+                        .clickable { onLaunchRadio() }
+                        .padding(vertical = 4.dp)
                 ) {
                     Icon(
                         imageVector = Icons.Default.Radio,
                         contentDescription = "FM Radio",
                         tint = AccentCyan,
-                        modifier = Modifier.size(18.dp)
+                        modifier = Modifier.size(20.dp)
                     )
                     Text(
                         text = stationInfo.ifBlank { "FM RADIO" },
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.ExtraBold,
                         color = AccentCyan,
-                        letterSpacing = 0.5.sp
+                        letterSpacing = 0.5.sp,
+                        maxLines = 1
                     )
-                }
-
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    // Live ON AIR / STANDBY Pill
+                    // Status Indicator Pill
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier
-                            .clip(RoundedCornerShape(6.dp))
+                            .clip(RoundedCornerShape(8.dp))
                             .background(CarSurfaceVariant)
-                            .padding(horizontal = 8.dp, vertical = 4.dp)
+                            .padding(horizontal = 7.dp, vertical = 3.dp)
                     ) {
                         Box(
                             modifier = Modifier
@@ -136,62 +137,67 @@ fun RadioStationWidget(
                                 .clip(CircleShape)
                                 .background(if (isRadioActive) AccentGreen else AccentAmber)
                         )
-                        Spacer(modifier = Modifier.width(5.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
                         Text(
-                            text = if (isRadioActive) "ON AIR" else "STANDBY",
+                            text = if (isRadioActive) "ON" else "IDLE",
                             fontSize = 9.sp,
                             fontWeight = FontWeight.Bold,
-                            color = if (isRadioActive) AccentGreen else AccentAmber,
-                            letterSpacing = 0.5.sp
+                            color = if (isRadioActive) AccentGreen else AccentAmber
                         )
                     }
+                }
 
-                    // Open Full Radio App Button
-                    Box(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(6.dp))
-                            .background(CarSurfaceVariant)
-                            .border(1.dp, CarBorder, RoundedCornerShape(6.dp))
-                            .clickable { onLaunchRadio() }
-                            .padding(horizontal = 7.dp, vertical = 4.dp),
-                        contentAlignment = Alignment.Center
+                Spacer(modifier = Modifier.width(8.dp))
+
+                // Dedicated Large Open Radio App Button (40.dp height for easy tap)
+                Box(
+                    modifier = Modifier
+                        .height(40.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(CarSurfaceVariant)
+                        .border(1.dp, CarBorder, RoundedCornerShape(12.dp))
+                        .clickable { onLaunchRadio() }
+                        .padding(horizontal = 12.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(5.dp)
                     ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(3.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.OpenInNew,
-                                contentDescription = "Open Radio App",
-                                tint = TextSecondary,
-                                modifier = Modifier.size(11.dp)
-                            )
-                            Text(
-                                text = "APP",
-                                fontSize = 9.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = TextSecondary
-                            )
-                        }
+                        Icon(
+                            imageVector = Icons.Default.OpenInNew,
+                            contentDescription = "Open Radio App",
+                            tint = AccentCyan,
+                            modifier = Modifier.size(15.dp)
+                        )
+                        Text(
+                            text = "TUNER",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = TextPrimary,
+                            letterSpacing = 0.5.sp
+                        )
                     }
                 }
             }
 
-            // 2. Center Frequency Display & Seek Controls
+            // 2. Main Frequency Display & Large Tactile Seek Paddles (62.dp wide each)
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clip(RoundedCornerShape(14.dp))
+                    .weight(1.1f)
+                    .clip(RoundedCornerShape(16.dp))
                     .background(CarSurfaceVariant.copy(alpha = 0.55f))
-                    .border(1.dp, CarBorder.copy(alpha = 0.45f), RoundedCornerShape(14.dp))
-                    .padding(horizontal = 8.dp, vertical = 8.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
+                    .border(1.dp, CarBorder.copy(alpha = 0.5f), RoundedCornerShape(16.dp))
+                    .padding(8.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Seek Previous Button
+                // Seek Previous Paddle Button (62.dp wide x full height)
                 Box(
                     modifier = Modifier
-                        .size(44.dp)
+                        .width(62.dp)
+                        .fillMaxHeight()
                         .clip(RoundedCornerShape(12.dp))
                         .background(CarSurface)
                         .border(1.dp, CarBorder, RoundedCornerShape(12.dp))
@@ -202,49 +208,41 @@ fun RadioStationWidget(
                         imageVector = Icons.Default.SkipPrevious,
                         contentDescription = "Seek Previous",
                         tint = TextPrimary,
-                        modifier = Modifier.size(24.dp)
+                        modifier = Modifier.size(32.dp)
                     )
                 }
 
-                // Frequency Readout (Tap to open NWD Radio UI)
+                // Center Frequency Readout (Tap to open NWD Radio UI)
                 Column(
                     horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center,
                     modifier = Modifier
                         .weight(1f)
+                        .fillMaxHeight()
+                        .clip(RoundedCornerShape(10.dp))
                         .clickable { onLaunchRadio() }
                 ) {
-                    Row(
-                        verticalAlignment = Alignment.Bottom,
-                        horizontalArrangement = Arrangement.Center
-                    ) {
-                        Text(
-                            text = formattedFreq,
-                            fontSize = 30.sp,
-                            fontWeight = FontWeight.Black,
-                            fontFamily = FontFamily.Monospace,
-                            color = TextPrimary,
-                            letterSpacing = (-0.5).sp
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text(
-                            text = "MHz",
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = AccentCyan,
-                            modifier = Modifier.padding(bottom = 5.dp)
-                        )
-                    }
                     Text(
-                        text = "Tap to open Radio • Hold preset to save",
-                        fontSize = 9.sp,
-                        color = TextMuted
+                        text = formattedFreq,
+                        fontSize = 32.sp,
+                        fontWeight = FontWeight.Black,
+                        fontFamily = FontFamily.Monospace,
+                        color = TextPrimary,
+                        letterSpacing = (-1).sp
+                    )
+                    Text(
+                        text = "MHz • FM",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = AccentCyan
                     )
                 }
 
-                // Seek Next Button
+                // Seek Next Paddle Button (62.dp wide x full height)
                 Box(
                     modifier = Modifier
-                        .size(44.dp)
+                        .width(62.dp)
+                        .fillMaxHeight()
                         .clip(RoundedCornerShape(12.dp))
                         .background(CarSurface)
                         .border(1.dp, CarBorder, RoundedCornerShape(12.dp))
@@ -255,55 +253,84 @@ fun RadioStationWidget(
                         imageVector = Icons.Default.SkipNext,
                         contentDescription = "Seek Next",
                         tint = TextPrimary,
-                        modifier = Modifier.size(24.dp)
+                        modifier = Modifier.size(32.dp)
                     )
                 }
             }
 
-            // 3. Bottom Preset Slots (4 Presets: Tap to tune, Long-press to save current frequency)
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                verticalAlignment = Alignment.CenterVertically
+            // 3. Bottom 2x2 Preset Matrix (4 Presets arranged in 2 rows x 2 columns with 10.dp spacing)
+            // Gives each preset button ~122dp width x ~58dp height so misclicks are impossible
+            val presetItems = presets.take(4)
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1.3f),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                presets.take(4).forEachIndexed { index, presetFreq ->
-                    val isSelected = abs(presetFreq - frequencyMhz) < 0.05f
-                    val presetText = String.format(Locale.US, "%.1f", presetFreq)
-
-                    Box(
+                for (rowIndex in 0 until 2) {
+                    Row(
                         modifier = Modifier
-                            .weight(1f)
-                            .height(42.dp)
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(if (isSelected) AccentCyan else CarSurfaceVariant)
-                            .border(
-                                width = 1.dp,
-                                color = if (isSelected) AccentCyan else CarBorder,
-                                shape = RoundedCornerShape(12.dp)
-                            )
-                            .combinedClickable(
-                                onClick = { onSelectPreset(index) },
-                                onLongClick = { onSavePreset(index) }
-                            ),
-                        contentAlignment = Alignment.Center
+                            .fillMaxWidth()
+                            .weight(1f),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.Center
-                        ) {
-                            Text(
-                                text = "P${index + 1}",
-                                fontSize = 8.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = if (isSelected) Color.Black.copy(alpha = 0.7f) else TextMuted
-                            )
-                            Text(
-                                text = presetText,
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.Black,
-                                fontFamily = FontFamily.Monospace,
-                                color = if (isSelected) Color.Black else TextPrimary
-                            )
+                        for (colIndex in 0 until 2) {
+                            val index = rowIndex * 2 + colIndex
+                            val presetFreq = presetItems.getOrElse(index) { 87.5f }
+                            val isSelected = abs(presetFreq - frequencyMhz) < 0.05f
+                            val presetText = String.format(Locale.US, "%.1f", presetFreq)
+
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .fillMaxHeight()
+                                    .clip(RoundedCornerShape(14.dp))
+                                    .background(if (isSelected) AccentCyan else CarSurfaceVariant)
+                                    .border(
+                                        width = 1.dp,
+                                        color = if (isSelected) AccentCyan else CarBorder,
+                                        shape = RoundedCornerShape(14.dp)
+                                    )
+                                    .combinedClickable(
+                                        onClick = { onSelectPreset(index) },
+                                        onLongClick = { onSavePreset(index) }
+                                    )
+                                    .padding(horizontal = 10.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .clip(RoundedCornerShape(6.dp))
+                                            .background(
+                                                if (isSelected) Color.Black.copy(alpha = 0.2f)
+                                                else CarSurface
+                                            )
+                                            .padding(horizontal = 6.dp, vertical = 3.dp),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Text(
+                                            text = "P${index + 1}",
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.ExtraBold,
+                                            color = if (isSelected) Color.Black else AccentCyan
+                                        )
+                                    }
+
+                                    Text(
+                                        text = presetText,
+                                        fontSize = 16.sp,
+                                        fontWeight = FontWeight.Black,
+                                        fontFamily = FontFamily.Monospace,
+                                        color = if (isSelected) Color.Black else TextPrimary
+                                    )
+                                }
+                            }
                         }
                     }
                 }

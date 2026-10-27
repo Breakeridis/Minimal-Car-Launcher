@@ -69,21 +69,21 @@ fun LeftBottomDock(
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .height(74.dp)
-            .clip(RoundedCornerShape(20.dp))
+            .height(104.dp)
+            .clip(RoundedCornerShape(22.dp))
             .background(dockGradient)
-            .border(1.dp, CarBorder.copy(alpha = 0.55f), RoundedCornerShape(20.dp))
-            .padding(horizontal = 8.dp, vertical = 6.dp),
+            .border(1.dp, CarBorder.copy(alpha = 0.55f), RoundedCornerShape(22.dp))
+            .padding(horizontal = 10.dp, vertical = 12.dp),
         horizontalArrangement = Arrangement.Start,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        // App Drawer Toggle Button (Icon Only - No Text)
+        // App Drawer Toggle Button (~1.5x larger touch target to prevent misclicks)
         Box(
             modifier = Modifier
-                .size(54.dp)
-                .clip(RoundedCornerShape(14.dp))
+                .size(80.dp)
+                .clip(RoundedCornerShape(18.dp))
                 .background(CarSurfaceVariant.copy(alpha = 0.85f))
-                .border(1.dp, CarBorder.copy(alpha = 0.45f), RoundedCornerShape(14.dp))
+                .border(1.dp, CarBorder.copy(alpha = 0.55f), RoundedCornerShape(18.dp))
                 .clickable { onOpenAppDrawer() },
             contentAlignment = Alignment.Center
         ) {
@@ -91,45 +91,45 @@ fun LeftBottomDock(
                 imageVector = Icons.Default.Apps,
                 contentDescription = "All Apps",
                 tint = AccentCyan,
-                modifier = Modifier.size(28.dp)
+                modifier = Modifier.size(42.dp)
             )
         }
 
-        Spacer(modifier = Modifier.width(8.dp))
+        Spacer(modifier = Modifier.width(12.dp))
 
-        // Pinned Custom Apps + Add (+) Button
+        // Pinned Custom Apps + Add (+) Button (~1.5x larger with 12.dp separation)
         Row(
             modifier = Modifier
                 .weight(1f)
                 .horizontalScroll(rememberScrollState()),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             pinnedApps.forEach { app ->
-                val imageBitmap = app.iconBitmap ?: BitmapHelper.safeDrawableToImageBitmap(app.icon, 72, 72)
+                val imageBitmap = app.iconBitmap ?: BitmapHelper.safeDrawableToImageBitmap(app.icon, 84, 84)
                 Box(
                     modifier = Modifier
-                        .size(52.dp)
-                        .clip(CircleShape)
-                        .background(CarSurfaceVariant.copy(alpha = 0.8f))
-                        .border(1.dp, CarBorder.copy(alpha = 0.45f), CircleShape)
+                        .size(78.dp)
+                        .clip(RoundedCornerShape(18.dp))
+                        .background(CarSurfaceVariant.copy(alpha = 0.85f))
+                        .border(1.dp, CarBorder.copy(alpha = 0.5f), RoundedCornerShape(18.dp))
                         .combinedClickable(
                             onClick = { onLaunchApp(app) },
                             onLongClick = { onLongClickApp(app) }
                         )
-                        .padding(6.dp),
+                        .padding(10.dp),
                     contentAlignment = Alignment.Center
                 ) {
                     if (imageBitmap != null) {
                         Image(
                             bitmap = imageBitmap,
                             contentDescription = app.label,
-                            modifier = Modifier.size(38.dp)
+                            modifier = Modifier.size(56.dp)
                         )
                     } else {
                         Text(
                             text = app.label.take(1).uppercase(),
-                            fontSize = 16.sp,
+                            fontSize = 24.sp,
                             fontWeight = FontWeight.Bold,
                             color = AccentCyan
                         )
@@ -137,14 +137,14 @@ fun LeftBottomDock(
                 }
             }
 
-            // Add (+) Button to open app list and pin apps to bar
+            // Add (+) Button to open app list and pin apps to bar (~1.5x larger)
             if (pinnedApps.size < com.minimal.carlauncher.data.AppRepository.MAX_DOCK_APPS) {
                 Box(
                     modifier = Modifier
-                        .size(52.dp)
-                        .clip(CircleShape)
-                        .background(CarSurfaceVariant.copy(alpha = 0.8f))
-                        .border(1.dp, AccentCyan.copy(alpha = 0.45f), CircleShape)
+                        .size(78.dp)
+                        .clip(RoundedCornerShape(18.dp))
+                        .background(CarSurfaceVariant.copy(alpha = 0.85f))
+                        .border(1.dp, AccentCyan.copy(alpha = 0.5f), RoundedCornerShape(18.dp))
                         .clickable { onAddApp() },
                     contentAlignment = Alignment.Center
                 ) {
@@ -152,7 +152,7 @@ fun LeftBottomDock(
                         imageVector = Icons.Default.Add,
                         contentDescription = "Add App to Bar",
                         tint = AccentCyan,
-                        modifier = Modifier.size(24.dp)
+                        modifier = Modifier.size(36.dp)
                     )
                 }
             }

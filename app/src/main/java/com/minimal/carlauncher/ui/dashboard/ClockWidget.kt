@@ -78,7 +78,7 @@ fun ClockWidget(
         ) {
             Text(
                 text = if (time.isNotBlank()) time else "--:--",
-                fontSize = 68.sp,
+                fontSize = 58.sp,
                 fontWeight = FontWeight.Bold,
                 color = TextPrimary,
                 letterSpacing = (-1).sp
@@ -88,7 +88,7 @@ fun ClockWidget(
 
             Text(
                 text = if (seconds.isNotBlank()) seconds else "00",
-                fontSize = 24.sp,
+                fontSize = 22.sp,
                 fontWeight = FontWeight.Medium,
                 color = AccentCyan,
                 modifier = Modifier.padding(bottom = 6.dp)
@@ -99,7 +99,7 @@ fun ClockWidget(
 
         Text(
             text = if (date.isNotBlank()) date else "Loading date…",
-            fontSize = 16.sp,
+            fontSize = 15.sp,
             fontWeight = FontWeight.Medium,
             color = TextSecondary
         )
