@@ -127,7 +127,8 @@ class AppRepository(private val context: Context) {
                     } catch (e: Throwable) {
                         null
                     }
-                    val iconBitmap = BitmapHelper.safeDrawableToImageBitmap(icon, 84, 84)
+                    // Pre-cache compact 64x64 ImageBitmap on IO thread and release raw Drawable reference to save RAM
+                    val iconBitmap = BitmapHelper.safeDrawableToImageBitmap(icon, 64, 64)
 
                     val activityName = activityInfo.name ?: ""
 
@@ -141,7 +142,7 @@ class AppRepository(private val context: Context) {
                         label = label,
                         packageName = pkg,
                         activityName = activityName,
-                        icon = icon,
+                        icon = null,
                         iconBitmap = iconBitmap,
                         isZLink = isZLink,
                         isNavigation = isNav,
@@ -310,6 +311,7 @@ class AppRepository(private val context: Context) {
 
         // 2. Try explicit radio activities in Junsun / Topway / Forfan multi-function suites
         val explicitRadioActivities = listOf(
+            "com.nwd.radio" to "com.nwd.radio.home_horizontalActivity",
             "com.ts.MainUI" to "com.ts.main.radio.RadioMainActivity",
             "com.ts.MainUI" to "com.ts.main.radio.RadioActivity",
             "com.forfan.carassist" to "com.forfan.carassist.RadioActivity",

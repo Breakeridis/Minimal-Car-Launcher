@@ -14,7 +14,12 @@ object BitmapHelper {
 
         return try {
             if (drawable is BitmapDrawable && drawable.bitmap != null && !drawable.bitmap.isRecycled) {
-                drawable.bitmap.asImageBitmap()
+                val src = drawable.bitmap
+                if (src.width <= width && src.height <= height) {
+                    src.asImageBitmap()
+                } else {
+                    Bitmap.createScaledBitmap(src, width, height, true).asImageBitmap()
+                }
             } else {
                 val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
                 val canvas = Canvas(bitmap)

@@ -218,6 +218,28 @@ object DiagnosticsManager {
         return result
     }
 
+    private fun parseProcMemInfo(): Map<String, Long> {
+        val map = LinkedHashMap<String, Long>()
+        try {
+            val file = File("/proc/meminfo")
+            if (file.exists() && file.canRead()) {
+                file.forEachLine { line ->
+                    val parts = line.split(":", limit = 2)
+                    if (parts.size == 2) {
+                        val key = parts[0].trim()
+                        val rawVal = parts[1].trim().split("\\s+".toRegex()).firstOrNull()?.toLongOrNull()
+                        if (rawVal != null) {
+                            map[key] = rawVal // in kB
+                        }
+                    }
+                }
+            }
+        } catch (e: Throwable) {
+            // Ignore
+        }
+        return map
+    }
+
     fun getSystemInfo(context: Context): SystemDiagnosticInfo {
         val dm = context.resources.displayMetrics
         val screen = "${dm.widthPixels}x${dm.heightPixels} (${dm.densityDpi} dpi, ${dm.density}x)"
@@ -226,16 +248,41 @@ object DiagnosticsManager {
             .ifEmpty { readSystemProperty("ro.product.board") }
             .ifEmpty { Build.BOARD ?: "Unknown" }
 
+        val procMem = parseProcMemInfo()
         val ramSummary = try {
             val am = context.getSystemService(Context.ACTIVITY_SERVICE) as? ActivityManager
             val memInfo = ActivityManager.MemoryInfo()
             am?.getMemoryInfo(memInfo)
-            if (memInfo.totalMem > 0) {
-                val totalGb = memInfo.totalMem.toDouble() / (1024.0 * 1024.0 * 1024.0)
-                val availGb = memInfo.availMem.toDouble() / (1024.0 * 1024.0 * 1024.0)
-                String.format(Locale.US, "%.2f GB Total (%.2f GB Free)", totalGb, availGb)
-            } else {
-                "Unknown"
+
+            val apiTotalGb = if (memInfo.totalMem > 0) memInfo.totalMem.toDouble() / (1024.0 * 1024.0 * 1024.0) else 0.0
+            val apiAvailGb = if (memInfo.availMem > 0) memInfo.availMem.toDouble() / (1024.0 * 1024.0 * 1024.0) else 0.0
+
+            val memTotalKb = procMem["MemTotal"] ?: 0L
+            val memFreeKb = procMem["MemFree"] ?: 0L
+            val activeKb = procMem["Active"] ?: 0L
+            val inactiveKb = procMem["Inactive"] ?: 0L
+            val unevictableKb = procMem["Unevictable"] ?: 0L
+            val slabKb = procMem["Slab"] ?: 0L
+            val kernelStackKb = procMem["KernelStack"] ?: 0L
+            val pageTablesKb = procMem["PageTables"] ?: 0L
+            val swapTotalKb = procMem["SwapTotal"] ?: 0L
+            val swapFreeKb = procMem["SwapFree"] ?: 0L
+
+            // Unspoofable sum of real physical kernel memory buckets (in GB)
+            val accountedKb = memFreeKb + activeKb + inactiveKb + unevictableKb + slabKb + kernelStackKb + pageTablesKb
+            val accountedGb = accountedKb.toDouble() / (1024.0 * 1024.0)
+            val procTotalGb = memTotalKb.toDouble() / (1024.0 * 1024.0)
+            val swapTotalMb = swapTotalKb / 1024
+            val swapUsedMb = (swapTotalKb - swapFreeKb).coerceAtLeast(0L) / 1024
+
+            buildString {
+                append(String.format(Locale.US, "API: %.2f GB Total (%.2f GB Free)", apiTotalGb, apiAvailGb))
+                if (memTotalKb > 0) {
+                    append(String.format(Locale.US, " | /proc/meminfo: %.2f GB | Real Kernel Pages: ~%.2f GB", procTotalGb, accountedGb))
+                }
+                if (swapTotalMb > 0) {
+                    append(" | ZRAM/Swap: ${swapUsedMb}/${swapTotalMb} MB used")
+                }
             }
         } catch (e: Throwable) {
             "Unknown"
@@ -685,6 +732,18 @@ object DiagnosticsManager {
         appendLine("- CPU Model / Cores: ${sys.cpuModel} (${sys.cpuCores} cores)")
         appendLine("- CPU Architectures (ABIs): ${sys.supportedAbis}")
         appendLine("- Memory (RAM): ${sys.ramSummary}")
+        val rawMem = parseProcMemInfo()
+        if (rawMem.isNotEmpty()) {
+            val keysOfInterest = listOf(
+                "MemTotal", "MemFree", "MemAvailable", "Buffers", "Cached",
+                "Active", "Inactive", "Unevictable", "AnonPages", "Mapped",
+                "Shmem", "Slab", "KernelStack", "PageTables", "SwapTotal", "SwapFree"
+            )
+            val memBreakdown = keysOfInterest.mapNotNull { k ->
+                rawMem[k]?.let { "$k=${it / 1024}MB" }
+            }.joinToString(", ")
+            appendLine("- Kernel /proc/meminfo Breakdown: $memBreakdown")
+        }
         appendLine("- Kernel Version: ${sys.kernelVersion}")
         appendLine("- Android OS: Android ${sys.androidVersion} (API ${sys.apiLevel})")
         appendLine("- Build Display ID: ${sys.buildDisplay}")

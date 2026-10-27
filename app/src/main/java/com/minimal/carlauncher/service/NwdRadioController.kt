@@ -265,26 +265,27 @@ class NwdRadioController(private val context: Context) {
      * Launches the NWD Radio UI (`com.nwd.radio.home_horizontalActivity`) directly.
      */
     fun launchNwdRadioApp(): Boolean {
+        try {
+            val launch = context.packageManager.getLaunchIntentForPackage(NWD_RADIO_UI_PKG)
+            if (launch != null) {
+                launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED)
+                context.startActivity(launch)
+                return true
+            }
+        } catch (e: Throwable) {
+            // Try explicit activity next
+        }
+
         return try {
             val explicit = Intent(Intent.ACTION_MAIN).apply {
                 component = ComponentName(NWD_RADIO_UI_PKG, NWD_RADIO_UI_ACTIVITY)
+                addCategory(Intent.CATEGORY_LAUNCHER)
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED)
             }
             context.startActivity(explicit)
             true
         } catch (e: Throwable) {
-            try {
-                val launch = context.packageManager.getLaunchIntentForPackage(NWD_RADIO_UI_PKG)
-                if (launch != null) {
-                    launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                    context.startActivity(launch)
-                    true
-                } else {
-                    false
-                }
-            } catch (e2: Throwable) {
-                false
-            }
+            false
         }
     }
 

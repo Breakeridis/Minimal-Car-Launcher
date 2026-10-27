@@ -167,33 +167,12 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
             val music = repository.resolveMusicApp(apps)
             val dvr = repository.resolveDvrApp(apps)
 
-            val radioApps = apps.filter { it.isRadio && !it.packageName.lowercase().contains("setting") }
-            val radioSummary = if (radioApps.isNotEmpty()) {
-                radioApps.joinToString(", ") { "${it.label} (${it.packageName})" }
-            } else {
-                val pm = getApplication<Application>().packageManager
-                val sysRadio = try {
-                    pm.getInstalledApplications(0).filter { info ->
-                        val p = info.packageName.lowercase()
-                        (p.contains("radio") || p.contains("tuner") || p.contains("mainui") || p.contains("carassist")) &&
-                            !p.contains("setting")
-                    }.map { info ->
-                        val lbl = try { pm.getApplicationLabel(info).toString() } catch (e: Throwable) { info.packageName }
-                        "$lbl (${info.packageName})"
-                    }
-                } catch (e: Throwable) {
-                    emptyList()
-                }
-                if (sysRadio.isNotEmpty()) sysRadio.joinToString(", ") else "Tap 'SHOW ALL INFO' to inspect"
-            }
-
             _allApps.value = apps
             _pinnedApps.value = pinned
             _zlinkApp.value = zlink
             _navigationApp.value = nav
             _musicApp.value = music
             _dvrApp.value = dvr
-            _detectedRadioSummary.value = radioSummary
         }
     }
 
@@ -563,7 +542,8 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
 
     fun launchRadio() {
         if (!nwdRadioController.launchNwdRadioApp() && !repository.launchRadioApp(_allApps.value)) {
-            openAboutDialog()
+            nwdRadioController.togglePlayPauseOrPower()
+            Toast.makeText(getApplication(), "FM Radio app not found on this device", Toast.LENGTH_SHORT).show()
         }
     }
 

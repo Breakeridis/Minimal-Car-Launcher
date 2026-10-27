@@ -320,13 +320,19 @@ fun CircularMapPortal(
         mapViewRef?.postInvalidate()
     }
 
-    // Initialize osmdroid configuration safely
+    // Initialize osmdroid configuration safely with compact low-RAM cache settings
     remember {
         try {
             val basePath = context.getExternalFilesDir("osmdroid") ?: context.cacheDir
-            Configuration.getInstance().osmdroidBasePath = basePath
-            Configuration.getInstance().osmdroidTileCache = File(basePath, "tiles")
-            Configuration.getInstance().userAgentValue = context.packageName
+            val cfg = Configuration.getInstance()
+            cfg.osmdroidBasePath = basePath
+            cfg.osmdroidTileCache = File(basePath, "tiles")
+            cfg.userAgentValue = context.packageName
+            // Keep in-memory tile bitmap cache compact for low-RAM head units (1280x720 circular viewport)
+            cfg.cacheMapTileCount = 16.toShort()
+            cfg.cacheMapTileOvershoot = 4.toShort()
+            cfg.tileDownloadThreads = 2.toShort()
+            cfg.tileFileSystemThreads = 2.toShort()
         } catch (e: Exception) {
             e.printStackTrace()
         }
@@ -499,7 +505,9 @@ fun CircularMapPortal(
                     MapView(ctx).apply {
                         setTileSource(TileSourceFactory.MAPNIK)
                         setMultiTouchControls(true)
-                        isTilesScaledToDpi = true
+                        // On 160 dpi (1.0x) head units, 256x256 tiles are already native 1:1 DPI.
+                        // Skipping DPI rescaling avoids allocating duplicate scaled bitmaps for every tile.
+                        isTilesScaledToDpi = screenDensity > 1.25f
                         setHasTransientState(true)
                         controller.setZoom(16.5)
 
