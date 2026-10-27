@@ -83,6 +83,9 @@ fun DashboardScreen(
 
     // Launcher Settings State
     val isLauncherSettingsOpen by viewModel.isLauncherSettingsOpen.collectAsState()
+    val hardwareUsage by viewModel.hardwareUsage.collectAsState()
+    val adbStatus by viewModel.adbStatus.collectAsState()
+    val isTestingAdb by viewModel.isTestingAdb.collectAsState()
     val googleStatuses by viewModel.googleStatuses.collectAsState()
     val isRootAvailable by viewModel.isRootAvailable.collectAsState()
     val busyPackage by viewModel.busyPackage.collectAsState()
@@ -307,6 +310,9 @@ fun DashboardScreen(
         // Launcher Settings (Google services toggles & Aurora Store installer)
         LauncherSettingsDialog(
             isOpen = isLauncherSettingsOpen,
+            hardwareUsage = hardwareUsage,
+            adbStatus = adbStatus,
+            isTestingAdb = isTestingAdb,
             googleStatuses = googleStatuses,
             isRootAvailable = isRootAvailable,
             busyPackage = busyPackage,
@@ -316,6 +322,8 @@ fun DashboardScreen(
             auroraStatusMessage = auroraStatusMessage,
             onToggleGooglePackage = { pkg, enable -> viewModel.setGooglePackageEnabled(pkg, enable) },
             onSetAllGoogle = { enable -> viewModel.setAllGoogleEnabled(enable) },
+            onTestAdb = { viewModel.testAdbConnection() },
+            onCopyAdbCommand = { pkg, enable -> viewModel.copyAdbCommand(pkg, enable) },
             onOpenAppInfo = { pkg -> viewModel.openSystemAppInfo(pkg) },
             onRefresh = { viewModel.refreshSystemAppStatuses() },
             onOpenAndroidSettings = { viewModel.openAndroidSettings() },

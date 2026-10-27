@@ -23,11 +23,15 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.Memory
 import androidx.compose.material.icons.filled.OpenInNew
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Shop
+import androidx.compose.material.icons.filled.Speed
+import androidx.compose.material.icons.filled.Terminal
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -52,6 +56,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import com.minimal.carlauncher.service.AdbStatus
+import com.minimal.carlauncher.service.HardwareUsage
 import com.minimal.carlauncher.service.SystemPackageStatus
 import com.minimal.carlauncher.ui.theme.AccentAmber
 import com.minimal.carlauncher.ui.theme.AccentCyan
@@ -63,16 +69,21 @@ import com.minimal.carlauncher.ui.theme.CarSurfaceVariant
 import com.minimal.carlauncher.ui.theme.TextMuted
 import com.minimal.carlauncher.ui.theme.TextPrimary
 import com.minimal.carlauncher.ui.theme.TextSecondary
+import java.util.Locale
 
 /**
  * Custom launcher settings screen:
+ *  - Live ultra-lightweight CPU & RAM hardware metrics
  *  - Shortcut to the Android system settings
- *  - Enable / disable Google Services Framework, Play Services and Play Store
+ *  - Enable / disable Google Services Framework, Play Services and Play Store via Root / Local ADB
  *  - Download & install Aurora Store (open-source Google Play client)
  */
 @Composable
 fun LauncherSettingsDialog(
     isOpen: Boolean,
+    hardwareUsage: HardwareUsage,
+    adbStatus: AdbStatus?,
+    isTestingAdb: Boolean,
     googleStatuses: List<SystemPackageStatus>,
     isRootAvailable: Boolean,
     busyPackage: String?,
@@ -82,6 +93,8 @@ fun LauncherSettingsDialog(
     auroraStatusMessage: String?,
     onToggleGooglePackage: (String, Boolean) -> Unit,
     onSetAllGoogle: (Boolean) -> Unit,
+    onTestAdb: () -> Unit,
+    onCopyAdbCommand: (String, Boolean) -> Unit,
     onOpenAppInfo: (String) -> Unit,
     onRefresh: () -> Unit,
     onOpenAndroidSettings: () -> Unit,
@@ -112,7 +125,7 @@ fun LauncherSettingsDialog(
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .widthIn(min = 340.dp, max = 680.dp)
+                    .widthIn(min = 340.dp, max = 700.dp)
                     .clip(RoundedCornerShape(20.dp))
                     .background(CarSurface)
                     .border(1.5.dp, CarBorder, RoundedCornerShape(20.dp))
@@ -142,7 +155,7 @@ fun LauncherSettingsDialog(
                                 color = TextPrimary
                             )
                             Text(
-                                text = "Google services & app store tools",
+                                text = "Diagnostics, Google services & store tools",
                                 fontSize = 11.sp,
                                 color = TextMuted
                             )
@@ -170,7 +183,75 @@ fun LauncherSettingsDialog(
 
                     Spacer(modifier = Modifier.height(14.dp))
 
-                    // 1. Android System Settings shortcut
+                    // 1. Live Ultra-Lightweight Hardware Usage Monitor (CPU & RAM)
+                    SectionCard {
+                        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Speed,
+                                        contentDescription = null,
+                                        tint = AccentCyan,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Text(
+                                        text = "HARDWARE USAGE",
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = AccentCyan,
+                                        letterSpacing = 0.5.sp
+                                    )
+                                }
+                                Text(
+                                    text = "Polled every 2s while open • 0% background overhead",
+                                    fontSize = 9.sp,
+                                    color = TextMuted
+                                )
+                            }
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                // CPU Metric Tile
+                                MetricBar(
+                                    title = "CPU Usage",
+                                    subtitle = "${hardwareUsage.cpuCores} Cores active",
+                                    percent = hardwareUsage.cpuPercent,
+                                    valueDisplay = "${hardwareUsage.cpuPercent}%",
+                                    accentColor = if (hardwareUsage.cpuPercent > 80) AccentAmber else AccentCyan,
+                                    modifier = Modifier.weight(1f)
+                                )
+
+                                // RAM Metric Tile
+                                val usedGb = hardwareUsage.ramUsedMb.toDouble() / 1024.0
+                                val totalGb = hardwareUsage.ramTotalMb.toDouble() / 1024.0
+                                val ramDisplay = if (totalGb > 0) {
+                                    String.format(Locale.US, "%.1f / %.1f GB (%d%%)", usedGb, totalGb, hardwareUsage.ramPercent)
+                                } else "${hardwareUsage.ramPercent}%"
+
+                                MetricBar(
+                                    title = "RAM Usage",
+                                    subtitle = "${hardwareUsage.ramFreeMb} MB Free",
+                                    percent = hardwareUsage.ramPercent,
+                                    valueDisplay = ramDisplay,
+                                    accentColor = if (hardwareUsage.ramPercent > 85) AccentRed else AccentGreen,
+                                    modifier = Modifier.weight(1f)
+                                )
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    // 2. Android System Settings shortcut
                     SectionCard {
                         Row(
                             modifier = Modifier
@@ -182,7 +263,7 @@ fun LauncherSettingsDialog(
                             IconBadge(Icons.Default.Settings, TextSecondary, 36)
                             Column(modifier = Modifier.weight(1f)) {
                                 Text("Android System Settings", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
-                                Text("Wi-Fi, Bluetooth, display, apps…", fontSize = 11.sp, color = TextSecondary)
+                                Text("Wi-Fi, Bluetooth, Developer Options, factory settings…", fontSize = 11.sp, color = TextSecondary)
                             }
                             Icon(Icons.Default.OpenInNew, null, tint = TextSecondary, modifier = Modifier.size(18.dp))
                         }
@@ -190,7 +271,7 @@ fun LauncherSettingsDialog(
 
                     Spacer(modifier = Modifier.height(10.dp))
 
-                    // 2. Google Services
+                    // 3. Google Services & Local ADB Controls
                     SectionCard {
                         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             Row(
@@ -199,16 +280,27 @@ fun LauncherSettingsDialog(
                                 horizontalArrangement = Arrangement.SpaceBetween
                             ) {
                                 Text(
-                                    text = "GOOGLE SERVICES",
+                                    text = "GOOGLE SERVICES & ADB",
                                     fontSize = 11.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = AccentCyan,
                                     letterSpacing = 0.5.sp
                                 )
-                                StatusPill(
-                                    text = if (isRootAvailable) "ROOT DETECTED" else "NO ROOT",
-                                    color = if (isRootAvailable) AccentGreen else AccentAmber
-                                )
+                                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    StatusPill(
+                                        text = if (isRootAvailable) "ROOT AVAILABLE" else "NO ROOT",
+                                        color = if (isRootAvailable) AccentGreen else TextMuted
+                                    )
+                                    val isAdbReachable = adbStatus?.portReachable == true
+                                    StatusPill(
+                                        text = when {
+                                            isAdbReachable -> "ADB PORT ${adbStatus?.tcpPort ?: 5555}: OPEN"
+                                            adbStatus?.usbDebuggingEnabled == true -> "ADB USB: ON"
+                                            else -> "ADB NET: INACTIVE"
+                                        },
+                                        color = if (isAdbReachable) AccentGreen else AccentAmber
+                                    )
+                                }
                             }
 
                             if (googleStatuses.isEmpty()) {
@@ -221,6 +313,7 @@ fun LauncherSettingsDialog(
                                     isBusy = busyPackage == status.packageName,
                                     enabled = !isBusy && status.isInstalled,
                                     onToggle = { onToggleGooglePackage(status.packageName, it) },
+                                    onCopyCommand = { onCopyAdbCommand(status.packageName, !status.isEnabled) },
                                     onOpenAppInfo = { onOpenAppInfo(status.packageName) }
                                 )
                             }
@@ -248,6 +341,20 @@ fun LauncherSettingsDialog(
                                 ) {
                                     Text("Disable All", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = AccentAmber)
                                 }
+                                OutlinedButton(
+                                    onClick = onTestAdb,
+                                    enabled = !isTestingAdb,
+                                    shape = RoundedCornerShape(10.dp),
+                                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
+                                ) {
+                                    if (isTestingAdb) {
+                                        CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 2.dp, color = AccentCyan)
+                                    } else {
+                                        Icon(Icons.Default.Terminal, null, tint = AccentCyan, modifier = Modifier.size(16.dp))
+                                    }
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text("Test / Connect ADB", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = AccentCyan)
+                                }
                             }
 
                             if (!settingsMessage.isNullOrBlank()) {
@@ -260,17 +367,19 @@ fun LauncherSettingsDialog(
                             }
 
                             Text(
-                                text = "Android only lets system-signed or rooted apps change other system apps. " +
-                                    "If toggling fails, tap ⓘ to open the system App Info page, or run the ADB command shown.",
+                                text = "• Toggling uses Root, Local ADB (port 5555), or System API automatically.\n" +
+                                        "• If port 5555 is inactive, enable Network ADB in Developer Options or run 'adb tcpip 5555' via PC once.\n" +
+                                        "• Tap the copy button to copy the ADB command for any service.",
                                 fontSize = 10.sp,
-                                color = TextMuted
+                                color = TextMuted,
+                                lineHeight = 14.sp
                             )
                         }
                     }
 
                     Spacer(modifier = Modifier.height(10.dp))
 
-                    // 3. Aurora Store
+                    // 4. Aurora Store
                     SectionCard {
                         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             Row(
@@ -282,7 +391,7 @@ fun LauncherSettingsDialog(
                                 Column(modifier = Modifier.weight(1f)) {
                                     Text("Aurora Store", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
                                     Text(
-                                        text = "Open-source Google Play client — works without Play Store / Google account",
+                                        text = "Open-source Google Play client — works without Play Store or Google account",
                                         fontSize = 11.sp,
                                         color = TextSecondary
                                     )
@@ -384,11 +493,51 @@ fun LauncherSettingsDialog(
 }
 
 @Composable
+private fun MetricBar(
+    title: String,
+    subtitle: String,
+    percent: Int,
+    valueDisplay: String,
+    accentColor: Color,
+    modifier: Modifier = Modifier
+) {
+    Box(
+        modifier = modifier
+            .clip(RoundedCornerShape(10.dp))
+            .background(CarSurface)
+            .border(1.dp, CarBorder, RoundedCornerShape(10.dp))
+            .padding(10.dp)
+    ) {
+        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(title, fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = TextSecondary)
+                Text(valueDisplay, fontSize = 11.sp, fontWeight = FontWeight.Bold, color = accentColor)
+            }
+            LinearProgressIndicator(
+                progress = (percent / 100f).coerceIn(0f, 1f),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(6.dp)
+                    .clip(RoundedCornerShape(3.dp)),
+                color = accentColor,
+                trackColor = CarSurfaceVariant
+            )
+            Text(subtitle, fontSize = 9.sp, color = TextMuted)
+        }
+    }
+}
+
+@Composable
 private fun GooglePackageRow(
     status: SystemPackageStatus,
     isBusy: Boolean,
     enabled: Boolean,
     onToggle: (Boolean) -> Unit,
+    onCopyCommand: () -> Unit,
     onOpenAppInfo: () -> Unit
 ) {
     Row(
@@ -396,14 +545,14 @@ private fun GooglePackageRow(
             .fillMaxWidth()
             .clip(RoundedCornerShape(10.dp))
             .background(CarSurface)
-            .padding(horizontal = 12.dp, vertical = 8.dp),
+            .padding(horizontal = 10.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(10.dp)
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         Column(modifier = Modifier.weight(1f)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(status.label, fontSize = 13.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
-                Spacer(modifier = Modifier.width(8.dp))
+                Text(status.label, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
+                Spacer(modifier = Modifier.width(6.dp))
                 StatusPill(
                     text = when {
                         !status.isInstalled -> "NOT PRESENT"
@@ -419,21 +568,29 @@ private fun GooglePackageRow(
             }
             Text(
                 text = status.packageName,
-                fontSize = 10.sp,
+                fontSize = 9.sp,
                 fontFamily = FontFamily.Monospace,
                 color = TextMuted
             )
         }
 
+        // Copy ADB command shortcut button
+        IconButton(
+            onClick = onCopyCommand,
+            modifier = Modifier.size(30.dp)
+        ) {
+            Icon(Icons.Default.ContentCopy, contentDescription = "Copy ADB command", tint = TextSecondary, modifier = Modifier.size(16.dp))
+        }
+
         if (status.isInstalled) {
-            IconButton(onClick = onOpenAppInfo, modifier = Modifier.size(32.dp)) {
-                Text("ⓘ", fontSize = 18.sp, color = AccentCyan)
+            IconButton(onClick = onOpenAppInfo, modifier = Modifier.size(30.dp)) {
+                Text("ⓘ", fontSize = 17.sp, color = AccentCyan)
             }
         }
 
         if (isBusy) {
             CircularProgressIndicator(
-                modifier = Modifier.size(22.dp),
+                modifier = Modifier.size(20.dp),
                 color = AccentCyan,
                 strokeWidth = 2.dp
             )
@@ -486,6 +643,6 @@ private fun StatusPill(text: String, color: Color) {
             .background(color.copy(alpha = 0.18f))
             .padding(horizontal = 6.dp, vertical = 2.dp)
     ) {
-        Text(text = text, fontSize = 9.sp, fontWeight = FontWeight.ExtraBold, color = color)
+        Text(text = text, fontSize = 8.sp, fontWeight = FontWeight.ExtraBold, color = color)
     }
 }

@@ -107,6 +107,11 @@ dependencies {
     // OpenStreetMap for Live Automotive Moving Road Map
     implementation("org.osmdroid:osmdroid-android:6.1.18")
 
+    // Pure-Kotlin ADB client: lets the launcher talk to the head unit's own adbd (localhost:5555)
+    // to run "pm enable/disable" for Google services when the user authorizes it.
+    // NOTE: stay on 1.2.x (built with Kotlin 1.9); 2.x requires a newer Kotlin compiler.
+    implementation("dev.mobile:dadb:1.2.10")
+
     debugImplementation("androidx.compose.ui:ui-tooling")
     debugImplementation("androidx.compose.ui:ui-test-manifest")
 }

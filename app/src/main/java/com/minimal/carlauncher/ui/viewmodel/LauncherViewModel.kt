@@ -6,7 +6,10 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.minimal.carlauncher.data.AppInfo
 import com.minimal.carlauncher.data.AppRepository
+import com.minimal.carlauncher.service.AdbStatus
 import com.minimal.carlauncher.service.DiagnosticsManager
+import com.minimal.carlauncher.service.HardwareUsage
+import com.minimal.carlauncher.service.HardwareUsageMonitor
 import com.minimal.carlauncher.service.NavigationRoute
 import com.minimal.carlauncher.service.NavigationService
 import com.minimal.carlauncher.service.NwdRadioController
@@ -16,6 +19,7 @@ import com.minimal.carlauncher.service.SystemPackageStatus
 import com.minimal.carlauncher.service.UpdateInfo
 import com.minimal.carlauncher.service.UpdateManager
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -180,6 +184,19 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
 
     private val _auroraStatusMessage = MutableStateFlow<String?>(null)
     val auroraStatusMessage: StateFlow<String?> = _auroraStatusMessage.asStateFlow()
+
+    // Hardware Usage (CPU & RAM) State - lightweight on-demand sampling
+    private val hardwareMonitor = HardwareUsageMonitor(application)
+    private val _hardwareUsage = MutableStateFlow(HardwareUsage())
+    val hardwareUsage: StateFlow<HardwareUsage> = _hardwareUsage.asStateFlow()
+
+    private val _adbStatus = MutableStateFlow<AdbStatus?>(null)
+    val adbStatus: StateFlow<AdbStatus?> = _adbStatus.asStateFlow()
+
+    private val _isTestingAdb = MutableStateFlow(false)
+    val isTestingAdb: StateFlow<Boolean> = _isTestingAdb.asStateFlow()
+
+    private var hardwareJob: Job? = null
 
     init {
         loadApps(force = true)
@@ -485,12 +502,29 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
         _settingsMessage.value = null
         _isLauncherSettingsOpen.value = true
         refreshSystemAppStatuses()
+        startHardwareMonitoring()
     }
 
     fun dismissLauncherSettings() {
         if (_auroraDownloadProgress.value == null) {
             _isLauncherSettingsOpen.value = false
+            stopHardwareMonitoring()
         }
+    }
+
+    private fun startHardwareMonitoring() {
+        hardwareJob?.cancel()
+        hardwareJob = viewModelScope.launch {
+            while (isActive && _isLauncherSettingsOpen.value) {
+                _hardwareUsage.value = hardwareMonitor.sample()
+                delay(2000)
+            }
+        }
+    }
+
+    private fun stopHardwareMonitoring() {
+        hardwareJob?.cancel()
+        hardwareJob = null
     }
 
     fun refreshSystemAppStatuses() {
@@ -498,6 +532,40 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
             _googleStatuses.value = systemAppsManager.getGoogleStatuses()
             _isRootAvailable.value = systemAppsManager.isRootBinaryPresent()
             _auroraInstalledVersion.value = systemAppsManager.getInstalledAuroraVersion()
+            _adbStatus.value = systemAppsManager.getAdbStatus()
+        }
+    }
+
+    fun testAdbConnection() {
+        if (_isTestingAdb.value) return
+        viewModelScope.launch {
+            _isTestingAdb.value = true
+            _settingsMessage.value = "Testing ADB on localhost:5555... Check for an 'Allow USB debugging' popup on screen!"
+            val result = systemAppsManager.testAdbConnection()
+            _isTestingAdb.value = false
+            if (result.success) {
+                _settingsMessage.value = "✅ ADB Connected & Authorized! Device: ${result.output.ifBlank { "OK" }}"
+                Toast.makeText(getApplication(), "ADB Connected & Authorized!", Toast.LENGTH_SHORT).show()
+            } else {
+                _settingsMessage.value = "❌ ADB: ${result.error ?: result.output}"
+            }
+            refreshSystemAppStatuses()
+        }
+    }
+
+    fun copyAdbCommand(packageName: String, enable: Boolean) {
+        val cmd = systemAppsManager.adbCommandFor(packageName, enable)
+        copyTextToClipboard("ADB Command", cmd)
+    }
+
+    fun copyTextToClipboard(label: String, text: String) {
+        try {
+            val clipboard = getApplication<Application>().getSystemService(android.content.Context.CLIPBOARD_SERVICE) as? android.content.ClipboardManager
+            val clip = android.content.ClipData.newPlainText(label, text)
+            clipboard?.setPrimaryClip(clip)
+            Toast.makeText(getApplication(), "Copied command to clipboard", Toast.LENGTH_SHORT).show()
+        } catch (e: Throwable) {
+            Toast.makeText(getApplication(), "Failed to copy: ${e.message}", Toast.LENGTH_SHORT).show()
         }
     }
 

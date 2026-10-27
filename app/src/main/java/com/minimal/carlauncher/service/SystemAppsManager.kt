@@ -74,6 +74,7 @@ class SystemAppsManager(private val context: Context) {
     }
 
     private val pm: PackageManager = context.packageManager
+    val localAdbClient = LocalAdbClient(context)
 
     // ---------------------------------------------------------------------------------------
     // Status
@@ -144,6 +145,14 @@ class SystemAppsManager(private val context: Context) {
         if (enable) "adb shell pm enable $packageName"
         else "adb shell pm disable-user --user 0 $packageName"
 
+    suspend fun getAdbStatus(): AdbStatus = localAdbClient.getStatus()
+
+    suspend fun testAdbConnection(): AdbResult = localAdbClient.shell("getprop ro.product.model")
+
+    fun setCustomAdbPort(port: Int?) {
+        localAdbClient.setCustomPort(port)
+    }
+
     // ---------------------------------------------------------------------------------------
     // Enable / Disable
     // ---------------------------------------------------------------------------------------
@@ -154,7 +163,38 @@ class SystemAppsManager(private val context: Context) {
                 return@withContext ToggleResult(false, "none", "Package is not present on this head unit")
             }
 
-            // 1. Direct API (only works if this APK is platform-signed / privileged)
+            val cmd = if (enable) {
+                // Unhide / reinstall-for-user too, in case the vendor hid or removed the
+                // package for user 0 instead of simply disabling it.
+                "pm unhide $packageName; pm install-existing $packageName; pm enable $packageName"
+            } else {
+                "pm disable-user --user 0 $packageName"
+            }
+
+            // 1. Root shell (if available)
+            if (isRootBinaryPresent()) {
+                val ok = runAsRoot(cmd)
+                if (ok && verify(packageName, enable)) {
+                    return@withContext ToggleResult(true, "root", "Success via root")
+                }
+            }
+
+            // 2. Local ADB Client (talks directly to adbd on localhost:5555 / network ADB)
+            val adbResult = localAdbClient.shell(cmd)
+            if (adbResult.success) {
+                kotlinx.coroutines.delay(100)
+                if (verify(packageName, enable)) {
+                    return@withContext ToggleResult(true, "local ADB", "Success via local ADB")
+                } else {
+                    return@withContext ToggleResult(
+                        true,
+                        "local ADB",
+                        "ADB executed: ${adbResult.output.ifBlank { "Done" }}"
+                    )
+                }
+            }
+
+            // 3. Direct API (only works if this APK is platform-signed / privileged)
             try {
                 pm.setApplicationEnabledSetting(
                     packageName,
@@ -163,37 +203,24 @@ class SystemAppsManager(private val context: Context) {
                     0
                 )
                 if (verify(packageName, enable)) {
-                    return@withContext ToggleResult(true, "system API", "Done")
+                    return@withContext ToggleResult(true, "system API", "Success via system API")
                 }
             } catch (e: SecurityException) {
-                // Expected for normal (non-system) apps; fall through to root.
+                // Expected for normal apps
             } catch (e: Exception) {
                 e.printStackTrace()
             }
 
-            // 2. Root shell
-            if (isRootBinaryPresent()) {
-                val cmd = if (enable) {
-                    // Unhide / reinstall-for-user too, in case the vendor hid or removed the
-                    // package for user 0 instead of simply disabling it.
-                    "pm unhide $packageName; pm install-existing $packageName; pm enable $packageName"
-                } else {
-                    "pm disable-user --user 0 $packageName"
-                }
-                val ok = runAsRoot(cmd)
-                if (ok && verify(packageName, enable)) {
-                    return@withContext ToggleResult(true, "root", "Done")
-                }
-                return@withContext ToggleResult(
-                    false, "root",
-                    "Root command failed or was denied. Grant root access to Car Launcher and retry."
-                )
+            val adbErrDetail = adbResult.error ?: adbResult.output
+            val reason = if (!adbErrDetail.isNullOrBlank()) {
+                "ADB: $adbErrDetail"
+            } else {
+                "Local ADB (port 5555) not reachable and unit is not rooted."
             }
 
             ToggleResult(
                 false, "none",
-                "Android blocks normal apps from changing system apps, and this head unit is not rooted. " +
-                    "Use the App Info screen or run via ADB:\n${adbCommandFor(packageName, enable)}"
+                "$reason\nRun once via PC ADB or enable Network ADB:\n${adbCommandFor(packageName, enable)}"
             )
         }
 
