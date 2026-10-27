@@ -17,7 +17,7 @@
 | **Product / Device Codename** | `ceres_b3` / `ceres-b3` (`ro.board.platform = ceres`) |
 | **SoC / CPU Hardware** | **Allwinner QuadCore-A133** (`sun50iw10p1`) |
 | **CPU Cores & Architecture** | 4× ARMv8 Processor rev 4 (`v8l`) running in 32-bit mode (`armeabi-v7a`, `armeabi`) |
-| **Memory (RAM)** | 4.00 GB Total |
+| **Memory (RAM)** | Reported as `4.00 GB Total`, but `/proc/meminfo` shows **4× spoofed counters** (`Slab=835MB`, `PageTables=601MB`, `KernelStack=262MB`, `SwapTotal=3071MB`) while real `MemAvailable=408MB` (`MemFree=52MB + Cached=345MB + Buffers=11MB`) indicates **1 GB (or 2 GB) true physical RAM** |
 | **Screen Resolution & Density** | `1280×720` (`160 dpi`, `1.0x` scale, landscape `ro.boot.nwd.orientation = 90`) |
 | **GPS Hardware** | `zkwAT6558R` (`persist.sys.nwd.gps-hw.version`) |
 | **Bluetooth / Wi-Fi Chip** | `8800_BT5.4_WIFI6/2025:07:07:14:30:10` (`System.nwd_bt_version`) |
@@ -64,7 +64,53 @@ The head unit separates the FM/AM radio into a **frontend UI app** and a **backg
 - **Manifest Intent Actions**:
   - `com.nwd.radio.service.ACTION_RADIO_SERVICE`
 
-### C. Related Radio System Properties & Settings
+### C. Verified `com.nwd.radio.service.RadioFeature` AIDL Interface
+Binding to `Intent("com.nwd.radio.service.ACTION_RADIO_SERVICE").setPackage("com.nwd.radio.service")` returns an `IBinder` with descriptor `com.nwd.radio.service.RadioFeature` (`com.nwd.radio.service.RadioFeature$Stub$Proxy`):
+- `setCurrentFrequency(int freq, byte band, int index): void` (`TRANSACTION = 1`, where FM `freq` is `8750..10800` in 10 kHz steps)
+- `getCurrentFrequency(): Frequency` (`TRANSACTION = 2`)
+- `seek(boolean isUp): void` (`TRANSACTION = 3`)
+- `search(boolean isUp): void` (`TRANSACTION = 4`)
+- `changeBand(): void` (`TRANSACTION = 5`)
+- `AMS(): void` (`TRANSACTION = 6`)
+- `INTRO(): void` (`TRANSACTION = 7`)
+- `setRadioBackServiceOn(boolean): void` (`TRANSACTION = 13`)
+- `isRadioBackServiceOn(): boolean` (`TRANSACTION = 14`)
+- `saveCurrentFrequency(byte index): void` (`TRANSACTION = 20`)
+- `getPrefabFrequency(): Frequency[]` (`TRANSACTION = 21`)
+- `getRadioPoint(): RadioPoint[]` (`TRANSACTION = 22`)
+- `getRadioState(): byte` (`TRANSACTION = 23`)
+- `registCallback(RadioCallback): void` (`TRANSACTION = 24`)
+- `unRegistCallback(RadioCallback): void` (`TRANSACTION = 25`)
+- `prefeb(boolean): void` (`TRANSACTION = 26`)
+- `sendRadioCommand(byte, byte): void` (`TRANSACTION = 27`)
+- `getRtMessage(): String` (`TRANSACTION = 28`)
+- `getRadioType(): int` (`TRANSACTION = 29`)
+- `getCurrentScanState(): int` (`TRANSACTION = 30`)
+
+### D. Verified `com.nwd.radio.service.RadioConstant` Broadcasts & Keys
+- `ACTION_RADIO_SERVICE = "com.nwd.radio.service.ACTION_RADIO_SERVICE"`
+- `ACTION_RADIO_STATE = "com.nwd.action.ACTION_RADIO_STATE"`
+- `ACTION_REQUEST_RADIO_FREQUENCE = "com.nwd.action.radiowidget_request_frequence"`
+- `ACTION_SEND_RADIO_FREQUENCE = "com.nwd.action.ACTION_SEND_RADIO_FREQUENCE"`
+- `ACTION_SEND_RADIO_FREQUENCE_NEW = "com.nwd.action.ACTION_SEND_RADIO_FREQUENCE_NEW"`
+- `ACTION_SEND_SCAN_RADIO_FREQUENCE = "com.nwd.action.ACTION_SEND_SCAN_RADIO_FREQUENCE"`
+- `ACTION_SET_RADIO_FREQUENCE = "com.nwd.action.ACTION_SET_RADIO_FREQUENCE"`
+- Extras:
+  - `EXTRA_BAND = "extra_band"`
+  - `EXTRA_FREQUENCE = "extra_frequence"` (`8750..10800` for FM, `531..1620` for AM)
+  - `EXTRA_RADIO_FREQUENCE = "extra_radio_frequence"`
+  - `EXTRA_RADIO_PRESTORE_NUM = "extra_radio_prestore_num"`
+  - `EXTRA_RADIO_STATE = "nwd_radio_state"`
+- Keys:
+  - `KEY_RADIO_CURRENT_BAND = "nwd_radio_current_band"`
+  - `KEY_RADIO_CURRENT_FREQ = "nwd_radio_current_freq"`
+  - `KEY_RADIO_CURRENT_FREQ_INDEX = "nwd_radio_current_freq_index"`
+  - `KEY_RADIO_CURRENT_PS_DATA = "nwd_radio_current_ps_data"`
+  - `KEY_RADIO_FM1_PRESTORE_DATA = "nwd_radio_fm1_prestore_data"`
+  - `KEY_RADIO_FM2_PRESTORE_DATA = "nwd_radio_fm2_prestore_data"`
+  - `KEY_RADIO_FM3_PRESTORE_DATA = "nwd_radio_fm3_prestore_data"`
+
+### E. Related Radio System Properties & Settings
 - `sys.nwd.audio.channel = FM`
 - `sys.nwd.cur.music.stream.proc = com.nwd.radio.service`
 - `persist.radio.i2s.use = true`

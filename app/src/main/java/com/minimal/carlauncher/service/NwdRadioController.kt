@@ -6,12 +6,9 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.content.ServiceConnection
-import android.media.AudioManager
 import android.os.Build
 import android.os.IBinder
-import android.os.SystemClock
 import android.provider.Settings
-import android.view.KeyEvent
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -26,10 +23,12 @@ import java.util.Locale
 import kotlin.math.roundToInt
 
 /**
- * Lightweight, 100% non-blocking controller for Nowada (NWD) Allwinner head unit radio
+ * Native controller for Nowada (NWD) Allwinner head unit radio
  * (`com.nwd.radio` UI + `com.nwd.radio.service.RadioService` backend).
  *
- * All binder IPC, reflection, and system property checks run strictly on Dispatchers.IO.
+ * Uses the verified AIDL interface `com.nwd.radio.service.RadioFeature` and
+ * `com.nwd.radio.service.RadioConstant` broadcasts discovered from the head unit.
+ * All IPC and reflection run strictly on Dispatchers.IO.
  */
 class NwdRadioController(private val context: Context) {
 
@@ -39,6 +38,24 @@ class NwdRadioController(private val context: Context) {
         const val NWD_RADIO_SERVICE_PKG = "com.nwd.radio.service"
         const val NWD_RADIO_SERVICE_CLASS = "com.nwd.radio.service.RadioService"
         const val NWD_RADIO_SERVICE_ACTION = "com.nwd.radio.service.ACTION_RADIO_SERVICE"
+
+        // Verified NWD RadioConstant Broadcast Actions
+        const val ACTION_RADIO_STATE = "com.nwd.action.ACTION_RADIO_STATE"
+        const val ACTION_REQUEST_RADIO_FREQUENCE = "com.nwd.action.radiowidget_request_frequence"
+        const val ACTION_SEND_RADIO_FREQUENCE = "com.nwd.action.ACTION_SEND_RADIO_FREQUENCE"
+        const val ACTION_SEND_RADIO_FREQUENCE_NEW = "com.nwd.action.ACTION_SEND_RADIO_FREQUENCE_NEW"
+        const val ACTION_SEND_SCAN_RADIO_FREQUENCE = "com.nwd.action.ACTION_SEND_SCAN_RADIO_FREQUENCE"
+        const val ACTION_SET_RADIO_FREQUENCE = "com.nwd.action.ACTION_SET_RADIO_FREQUENCE"
+
+        // Verified NWD RadioConstant Extras & Settings Keys
+        const val EXTRA_BAND = "extra_band"
+        const val EXTRA_FREQUENCE = "extra_frequence"
+        const val EXTRA_RADIO_FREQUENCE = "extra_radio_frequence"
+        const val EXTRA_RADIO_PRESTORE_NUM = "extra_radio_prestore_num"
+        const val EXTRA_RADIO_STATE = "nwd_radio_state"
+        const val KEY_RADIO_CURRENT_FREQ = "nwd_radio_current_freq"
+        const val KEY_RADIO_CURRENT_BAND = "nwd_radio_current_band"
+        const val KEY_RADIO_CURRENT_PS_DATA = "nwd_radio_current_ps_data"
 
         private const val PREFS_NAME = "nwd_radio_controller_prefs"
         private const val KEY_LAST_FREQ = "last_freq_mhz"
@@ -74,7 +91,13 @@ class NwdRadioController(private val context: Context) {
     private var proxyMethods: List<Method> = emptyList()
 
     @Volatile
+    private var currentBandByte: Byte = 0
+
+    @Volatile
     private var lastReceivedBroadcastInfo: String = "None"
+
+    @Volatile
+    private var lastFrequencyObjectDump: String = "None"
 
     @Volatile
     private var isBound = false
@@ -85,6 +108,7 @@ class NwdRadioController(private val context: Context) {
             if (service != null) {
                 scope.launch {
                     inspectAndAttachBinder(service)
+                    requestWidgetFrequencyBroadcast()
                 }
             }
         }
@@ -108,18 +132,24 @@ class NwdRadioController(private val context: Context) {
                         for (key in extras.keySet()) {
                             val v = extras.get(key)
                             sb.append(" [$key=$v]")
-                            // Check if any numeric extra represents FM frequency
-                            when (v) {
-                                is Int -> normalizeRawFreq(v)?.let { updateFrequencyFromSystem(it) }
-                                is Float -> normalizeRawFreqFloat(v)?.let { updateFrequencyFromSystem(it) }
-                                is Double -> normalizeRawFreqFloat(v.toFloat())?.let { updateFrequencyFromSystem(it) }
-                                is String -> v.toFloatOrNull()?.let { f ->
-                                    normalizeRawFreqFloat(f)?.let { updateFrequencyFromSystem(it) }
-                                }
-                            }
+                        }
+                        // Check verified NWD frequency extras ("extra_frequence", "extra_radio_frequence")
+                        val rawFreq = when {
+                            extras.containsKey(EXTRA_FREQUENCE) -> extras.getInt(EXTRA_FREQUENCE, -1)
+                            extras.containsKey(EXTRA_RADIO_FREQUENCE) -> extras.getInt(EXTRA_RADIO_FREQUENCE, -1)
+                            else -> -1
+                        }
+                        if (rawFreq > 0) {
+                            normalizeRawFreq(rawFreq)?.let { updateFrequencyFromSystem(it) }
+                        }
+                        if (extras.containsKey(EXTRA_BAND)) {
+                            val b = extras.get(EXTRA_BAND)
+                            if (b is Byte) currentBandByte = b
+                            else if (b is Int) currentBandByte = b.toByte()
                         }
                     }
                     lastReceivedBroadcastInfo = sb.toString()
+                    pollRadioStatusAndFrequency()
                 } catch (e: Throwable) {
                     // Ignore malformed extras
                 }
@@ -131,9 +161,10 @@ class NwdRadioController(private val context: Context) {
         scope.launch {
             registerDynamicReceivers()
             ensureServiceBound()
+            requestWidgetFrequencyBroadcast()
             while (isActive) {
                 pollRadioStatusAndFrequency()
-                delay(2500L)
+                delay(2000L)
             }
         }
     }
@@ -158,7 +189,7 @@ class NwdRadioController(private val context: Context) {
     fun selectPreset(index: Int) {
         val currentPresets = _presets.value
         if (index in currentPresets.indices) {
-            tuneFrequency(currentPresets[index])
+            tuneFrequency(currentPresets[index], presetIndex = index)
         }
     }
 
@@ -169,71 +200,99 @@ class NwdRadioController(private val context: Context) {
         updated[index] = currentFreq
         _presets.value = updated
         prefs.edit().putFloat("$KEY_PRESET_PREFIX$index", currentFreq).apply()
-    }
 
-    fun stepFrequency(deltaMhz: Float) {
-        val next = ((_frequencyMhz.value + deltaMhz) * 10f).roundToInt() / 10f
-        val wrapped = when {
-            next > 108.0f -> 87.5f
-            next < 87.5f -> 108.0f
-            else -> next
+        // Also save to NWD RadioService preset slot if bound
+        scope.launch {
+            val proxy = radioAidlProxy ?: return@launch
+            try {
+                val saveMethod = proxyMethods.firstOrNull {
+                    it.name == "saveCurrentFrequency" && it.parameterTypes.size == 1
+                }
+                saveMethod?.invoke(proxy, index.toByte())
+            } catch (e: Throwable) {
+                // Ignore
+            }
         }
-        tuneFrequency(wrapped)
     }
 
-    fun tuneFrequency(freqMhz: Float) {
+    /**
+     * Tunes directly to a specific FM frequency in MHz (e.g. 100.2 MHz -> 10020 in NWD 10kHz format).
+     * Uses both `RadioFeature.setCurrentFrequency(int, byte, int)` and `ACTION_SET_RADIO_FREQUENCE`.
+     */
+    fun tuneFrequency(freqMhz: Float, presetIndex: Int = -1) {
         val target = ((freqMhz * 10f).roundToInt() / 10f).coerceIn(87.5f, 108.0f)
         saveFrequency(target)
         scope.launch {
             ensureServiceBound()
-            val freqKhz = (target * 1000f).roundToInt()      // e.g. 100200
-            val freq10Khz = (target * 100f).roundToInt()     // e.g. 10020
-            val freq100Khz = (target * 10f).roundToInt()     // e.g. 1002
+            // NWD AWFmUtils uses 8750..10800 (10 kHz units, STEP_FM = 10)
+            val freq10Khz = (target * 100f).roundToInt()
 
-            // 1. Try AIDL proxy methods on com.nwd.radio.service.RadioService
-            val invokedAidl = invokeProxyTuneMethods(freqKhz, freq10Khz, freq100Khz, target)
+            // 1. Invoke verified RadioFeature.setCurrentFrequency(int, byte, int)
+            val invokedAidl = invokeSetCurrentFrequency(freq10Khz, currentBandByte, presetIndex)
 
-            // 2. Also send startService / broadcast command to com.nwd.radio.service
-            sendServiceCommand(
-                cmd = "tune",
-                freqKhz = freqKhz,
-                freq10Khz = freq10Khz,
-                freq100Khz = freq100Khz,
-                freqMhz = target
-            )
+            // 2. Also broadcast verified RadioConstant.ACTION_SET_RADIO_FREQUENCE
+            try {
+                val setFreqIntent = Intent(ACTION_SET_RADIO_FREQUENCE).apply {
+                    putExtra(EXTRA_FREQUENCE, freq10Khz)
+                    putExtra(EXTRA_RADIO_FREQUENCE, freq10Khz)
+                    putExtra(EXTRA_BAND, currentBandByte)
+                    if (presetIndex >= 0) {
+                        putExtra(EXTRA_RADIO_PRESTORE_NUM, presetIndex)
+                    }
+                }
+                context.sendBroadcast(setFreqIntent)
+            } catch (e: Throwable) {
+                // Ignore
+            }
 
             if (invokedAidl) {
+                delay(200L)
+                pollRadioStatusAndFrequency()
+            }
+        }
+    }
+
+    /**
+     * Seeks to the next strong FM station via `RadioFeature.seek(boolean)`.
+     */
+    fun seekNext() {
+        scope.launch {
+            ensureServiceBound()
+            val beforeFreq = _frequencyMhz.value
+            val invoked = invokeRadioSeek(isNext = true)
+            if (!invoked) {
+                // Fallback to +0.1 MHz step via setCurrentFrequency
+                val next = if (beforeFreq + 0.1f > 108.0f) 87.5f else beforeFreq + 0.1f
+                tuneFrequency(next)
+                return@launch
+            }
+            // Poll frequency updates as the tuner seeks
+            repeat(6) {
                 delay(250L)
                 pollRadioStatusAndFrequency()
             }
         }
     }
 
-    fun seekNext() {
-        stepFrequency(+0.1f)
-        scope.launch {
-            ensureServiceBound()
-            val invoked = invokeProxySeekMethod(isNext = true)
-            sendServiceCommand(cmd = "next")
-            if (!invoked && _isRadioActive.value) {
-                dispatchMediaKey(KeyEvent.KEYCODE_MEDIA_NEXT)
-            }
-            delay(400L)
-            pollRadioStatusAndFrequency()
-        }
-    }
-
+    /**
+     * Seeks to the previous strong FM station via `RadioFeature.seek(boolean)`.
+     */
     fun seekPrev() {
-        stepFrequency(-0.1f)
         scope.launch {
             ensureServiceBound()
-            val invoked = invokeProxySeekMethod(isNext = false)
-            sendServiceCommand(cmd = "prev")
-            if (!invoked && _isRadioActive.value) {
-                dispatchMediaKey(KeyEvent.KEYCODE_MEDIA_PREVIOUS)
+            val beforeFreq = _frequencyMhz.value
+            val invoked = invokeRadioSeek(isNext = false)
+            if (!invoked) {
+                // Fallback to -0.1 MHz step via setCurrentFrequency
+                val prev = if (beforeFreq - 0.1f < 87.5f) 108.0f else beforeFreq - 0.1f
+                tuneFrequency(prev)
+                return@launch
             }
-            delay(400L)
-            pollRadioStatusAndFrequency()
+            // Poll frequency updates as the tuner seeks
+            repeat(6) {
+                delay(250L)
+                pollRadioStatusAndFrequency()
+            }
         }
     }
 
@@ -242,21 +301,17 @@ class NwdRadioController(private val context: Context) {
             ensureServiceBound()
             val proxy = radioAidlProxy
             if (proxy != null) {
-                val powerMethod = proxyMethods.firstOrNull { m ->
-                    val n = m.name.lowercase()
-                    m.parameterTypes.isEmpty() && (
-                        n.contains("toggle") || n.contains("play") || n.contains("pause") ||
-                            n.contains("open") || n.contains("start") || n.contains("power")
-                        )
-                }
                 try {
-                    powerMethod?.invoke(proxy)
+                    val setBackOn = proxyMethods.firstOrNull {
+                        it.name == "setRadioBackServiceOn" && it.parameterTypes.size == 1
+                    }
+                    setBackOn?.invoke(proxy, !_isRadioActive.value)
                 } catch (e: Throwable) {
                     // Ignore
                 }
             }
-            sendServiceCommand(cmd = if (_isRadioActive.value) "pause" else "play")
-            delay(300L)
+            requestWidgetFrequencyBroadcast()
+            delay(250L)
             pollRadioStatusAndFrequency()
         }
     }
@@ -289,8 +344,16 @@ class NwdRadioController(private val context: Context) {
         }
     }
 
+    private fun requestWidgetFrequencyBroadcast() {
+        try {
+            context.sendBroadcast(Intent(ACTION_REQUEST_RADIO_FREQUENCE))
+        } catch (e: Throwable) {
+            // Ignore
+        }
+    }
+
     private fun ensureServiceBound() {
-        if (radioBinder?.isBinderAlive == true) return
+        if (radioBinder?.isBinderAlive == true && radioAidlProxy != null) return
         try {
             val actionIntent = Intent(NWD_RADIO_SERVICE_ACTION).apply {
                 setPackage(NWD_RADIO_SERVICE_PKG)
@@ -323,7 +386,7 @@ class NwdRadioController(private val context: Context) {
             }
             binderDescriptor = desc
 
-            val candidatePackages = listOf(NWD_RADIO_SERVICE_PKG, NWD_RADIO_UI_PKG, "com.nwd.kernel")
+            val candidatePackages = listOf(NWD_RADIO_SERVICE_PKG, NWD_RADIO_UI_PKG)
             for (pkg in candidatePackages) {
                 try {
                     val pkgCtx = context.createPackageContext(
@@ -334,12 +397,8 @@ class NwdRadioController(private val context: Context) {
                     val stubClassNames = buildList {
                         if (desc.isNotEmpty()) {
                             add("$desc\$Stub")
-                            add(desc)
                         }
-                        add("com.nwd.radio.service.IRadioService\$Stub")
-                        add("com.nwd.radio.IRadioService\$Stub")
-                        add("com.nwd.radio.aidl.IRadioService\$Stub")
-                        add("com.nwd.carkit.radio.IRadioService\$Stub")
+                        add("com.nwd.radio.service.RadioFeature\$Stub")
                     }
                     for (stubName in stubClassNames) {
                         try {
@@ -374,7 +433,7 @@ class NwdRadioController(private val context: Context) {
             val audioChannel = readSystemProperty("sys.nwd.audio.channel")
             val streamProc = readSystemProperty("sys.nwd.cur.music.stream.proc")
             val nwdRadioState = try {
-                Settings.System.getInt(context.contentResolver, "nwd_radio_state", 0)
+                Settings.System.getInt(context.contentResolver, EXTRA_RADIO_STATE, 0)
             } catch (e: Throwable) {
                 0
             }
@@ -384,167 +443,149 @@ class NwdRadioController(private val context: Context) {
                 -1
             }
 
+            // Also check Settings.System "nwd_radio_current_freq" if populated
+            try {
+                val sysFreq = Settings.System.getInt(context.contentResolver, KEY_RADIO_CURRENT_FREQ, -1)
+                if (sysFreq > 0) {
+                    normalizeRawFreq(sysFreq)?.let { updateFrequencyFromSystem(it) }
+                }
+            } catch (e: Throwable) {
+                // Ignore
+            }
+
             val isFmChannel = audioChannel.equals("FM", ignoreCase = true) ||
                 audioChannel.equals("AM", ignoreCase = true) ||
                 streamProc.contains("com.nwd.radio", ignoreCase = true)
             val active = isFmChannel || (nwdRadioState == 1 && mcuSource == 4)
             _isRadioActive.value = active
 
+            // Query `getCurrentFrequency(): Frequency` and `getRtMessage(): String` from RadioFeature proxy
+            val proxy = radioAidlProxy
+            var rdsText = ""
+            if (proxy != null && proxyMethods.isNotEmpty()) {
+                try {
+                    val getCurrentFreqMethod = proxyMethods.firstOrNull {
+                        it.name == "getCurrentFrequency" && it.parameterTypes.isEmpty()
+                    }
+                    val freqObj = getCurrentFreqMethod?.invoke(proxy)
+                    if (freqObj != null) {
+                        extractFrequencyFromNwdObject(freqObj)
+                    }
+                } catch (e: Throwable) {
+                    // Ignore
+                }
+
+                try {
+                    val getRtMethod = proxyMethods.firstOrNull {
+                        it.name == "getRtMessage" && it.parameterTypes.isEmpty()
+                    }
+                    rdsText = (getRtMethod?.invoke(proxy) as? String)?.trim().orEmpty()
+                } catch (e: Throwable) {
+                    // Ignore
+                }
+            }
+
             _stationInfo.value = when {
+                rdsText.isNotEmpty() -> rdsText
                 isFmChannel -> "${audioChannel.uppercase(Locale.US)} • ON AIR"
                 nwdRadioState == 1 -> "FM • READY"
                 else -> "FM • STANDBY"
-            }
-
-            // Query frequency from AIDL proxy if attached
-            val proxy = radioAidlProxy
-            if (proxy != null && proxyMethods.isNotEmpty()) {
-                val freqGetters = proxyMethods.filter { m ->
-                    val n = m.name.lowercase()
-                    m.parameterTypes.isEmpty() &&
-                        (m.returnType == Int::class.javaPrimitiveType ||
-                            m.returnType == Float::class.javaPrimitiveType ||
-                            m.returnType == Long::class.javaPrimitiveType) &&
-                        (n.contains("freq") || n.contains("channel") || n.contains("station"))
-                }
-                for (getter in freqGetters) {
-                    try {
-                        val res = getter.invoke(proxy)
-                        when (res) {
-                            is Int -> normalizeRawFreq(res)?.let {
-                                updateFrequencyFromSystem(it)
-                                return
-                            }
-                            is Long -> normalizeRawFreq(res.toInt())?.let {
-                                updateFrequencyFromSystem(it)
-                                return
-                            }
-                            is Float -> normalizeRawFreqFloat(res)?.let {
-                                updateFrequencyFromSystem(it)
-                                return
-                            }
-                        }
-                    } catch (e: Throwable) {
-                        // Try next getter
-                    }
-                }
             }
         } catch (e: Throwable) {
             // Ignore
         }
     }
 
-    private fun invokeProxySeekMethod(isNext: Boolean): Boolean {
-        val proxy = radioAidlProxy ?: return false
-        val keywords = if (isNext) {
-            listOf("seekup", "seeknext", "searchnext", "searchup", "next", "stepup", "autosearchup")
-        } else {
-            listOf("seekdown", "seekprev", "searchprev", "searchdown", "prev", "previous", "stepdown", "autosearchdown")
-        }
+    /**
+     * Extracts frequency (e.g. 8750..10800 -> 87.5..108.0 MHz) and bandType from NWD's `Frequency` Parcelable object.
+     */
+    private fun extractFrequencyFromNwdObject(freqObj: Any) {
+        val cls = freqObj.javaClass
+        val sb = StringBuilder(cls.name)
 
-        for (kw in keywords) {
-            val method = proxyMethods.firstOrNull { m ->
-                m.name.lowercase().contains(kw) && m.parameterTypes.isEmpty()
-            }
-            if (method != null) {
-                try {
-                    method.invoke(proxy)
-                    return true
-                } catch (e: Throwable) {
-                    // Continue
-                }
-            }
-        }
-        return false
-    }
-
-    private fun invokeProxyTuneMethods(
-        freqKhz: Int,
-        freq10Khz: Int,
-        freq100Khz: Int,
-        freqMhz: Float
-    ): Boolean {
-        val proxy = radioAidlProxy ?: return false
-        val tuneCandidates = proxyMethods.filter { m ->
-            val n = m.name.lowercase()
-            m.parameterTypes.size == 1 && (
-                n.contains("freq") || n.contains("tune") || n.contains("play") || n.contains("channel")
-                )
-        }
-        var invoked = false
-        for (m in tuneCandidates) {
+        // 1. Check declared fields on Frequency object
+        for (f in cls.declaredFields) {
             try {
-                when (m.parameterTypes[0]) {
-                    Int::class.javaPrimitiveType -> {
-                        // NWD typically uses 10kHz (e.g., 8750..10800) or 100kHz (875..1080) or kHz (87500..108000)
-                        m.invoke(proxy, freq10Khz)
-                        invoked = true
-                    }
-                    Float::class.javaPrimitiveType -> {
-                        m.invoke(proxy, freqMhz)
-                        invoked = true
-                    }
+                f.isAccessible = true
+                val v = f.get(freqObj)
+                sb.append(" ${f.name}=$v")
+                when (v) {
+                    is Int -> normalizeRawFreq(v)?.let { updateFrequencyFromSystem(it) }
+                    is Byte -> if (f.name.lowercase().contains("band")) currentBandByte = v
                 }
             } catch (e: Throwable) {
                 // Ignore
             }
         }
-        return invoked
-    }
 
-    private fun sendServiceCommand(
-        cmd: String,
-        freqKhz: Int? = null,
-        freq10Khz: Int? = null,
-        freq100Khz: Int? = null,
-        freqMhz: Float? = null
-    ) {
-        try {
-            val serviceIntent = Intent(NWD_RADIO_SERVICE_ACTION).apply {
-                component = ComponentName(NWD_RADIO_SERVICE_PKG, NWD_RADIO_SERVICE_CLASS)
-                putExtra("cmd", cmd)
-                putExtra("command", cmd)
-                putExtra("action", cmd)
-                if (freq10Khz != null) {
-                    putExtra("freq", freq10Khz)
-                    putExtra("frequency", freq10Khz)
+        // 2. Check zero-arg getter methods on Frequency object
+        for (m in cls.methods) {
+            if (m.parameterTypes.isNotEmpty() || m.declaringClass == Any::class.java) continue
+            try {
+                val n = m.name.lowercase()
+                if (m.returnType == Int::class.javaPrimitiveType && (n.contains("freq") || n.contains("value") || n.contains("station"))) {
+                    val v = m.invoke(freqObj) as? Int ?: continue
+                    sb.append(" ${m.name}()=$v")
+                    normalizeRawFreq(v)?.let { updateFrequencyFromSystem(it) }
+                } else if (m.returnType == Byte::class.javaPrimitiveType && n.contains("band")) {
+                    val b = m.invoke(freqObj) as? Byte ?: continue
+                    currentBandByte = b
                 }
-                if (freqKhz != null) {
-                    putExtra("freq_khz", freqKhz)
-                }
-                if (freq100Khz != null) {
-                    putExtra("freq_100khz", freq100Khz)
-                }
-                if (freqMhz != null) {
-                    putExtra("freq_mhz", freqMhz)
-                }
+            } catch (e: Throwable) {
+                // Ignore
             }
-            context.startService(serviceIntent)
-        } catch (e: Throwable) {
-            // Ignore if startService restricted
         }
+        lastFrequencyObjectDump = sb.toString()
     }
 
-    private fun dispatchMediaKey(keyCode: Int) {
-        try {
-            val am = context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager ?: return
-            val now = SystemClock.uptimeMillis()
-            am.dispatchMediaKeyEvent(KeyEvent(now, now, KeyEvent.ACTION_DOWN, keyCode, 0))
-            am.dispatchMediaKeyEvent(KeyEvent(now, now, KeyEvent.ACTION_UP, keyCode, 0))
-        } catch (e: Throwable) {
-            // Ignore
+    /**
+     * Invokes `RadioFeature.seek(boolean)` on `com.nwd.radio.service.RadioFeature`.
+     */
+    private fun invokeRadioSeek(isNext: Boolean): Boolean {
+        val proxy = radioAidlProxy ?: return false
+        val seekMethod = proxyMethods.firstOrNull {
+            it.name == "seek" &&
+                it.parameterTypes.size == 1 &&
+                it.parameterTypes[0] == Boolean::class.javaPrimitiveType
         }
+        if (seekMethod != null) {
+            try {
+                // In NWD RadioFeature: seek(boolean)
+                seekMethod.invoke(proxy, isNext)
+                return true
+            } catch (e: Throwable) {
+                // Ignore
+            }
+        }
+        return false
+    }
+
+    /**
+     * Invokes `RadioFeature.setCurrentFrequency(int freq, byte band, int index)` on `com.nwd.radio.service.RadioFeature`.
+     */
+    private fun invokeSetCurrentFrequency(freq10Khz: Int, band: Byte, presetIndex: Int): Boolean {
+        val proxy = radioAidlProxy ?: return false
+        val setFreqMethod = proxyMethods.firstOrNull {
+            it.name == "setCurrentFrequency" && it.parameterTypes.size == 3
+        }
+        if (setFreqMethod != null) {
+            try {
+                setFreqMethod.invoke(proxy, freq10Khz, band, presetIndex.coerceAtLeast(0))
+                return true
+            } catch (e: Throwable) {
+                // Ignore
+            }
+        }
+        return false
     }
 
     private fun registerDynamicReceivers() {
         try {
             val filter = IntentFilter().apply {
-                addAction("com.nwd.radio.ACTION_RADIO_INFO")
-                addAction("com.nwd.radio.ACTION_FREQ_CHANGE")
-                addAction("com.nwd.radio.service.ACTION_RADIO_INFO")
-                addAction("com.nwd.action.RADIO_FREQ_CHANGE")
-                addAction("com.nwd.action. RADIO_STATE_CHANGE")
-                addAction("android.intent.action.RADIO_INFO")
+                addAction(ACTION_SEND_RADIO_FREQUENCE)
+                addAction(ACTION_SEND_RADIO_FREQUENCE_NEW)
+                addAction(ACTION_SEND_SCAN_RADIO_FREQUENCE)
+                addAction(ACTION_RADIO_STATE)
             }
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                 context.registerReceiver(radioBroadcastReceiver, filter, Context.RECEIVER_EXPORTED)
@@ -561,16 +602,6 @@ class NwdRadioController(private val context: Context) {
             in 875..1080 -> raw / 10f
             in 8750..10800 -> raw / 100f
             in 87500..108000 -> raw / 1000f
-            else -> null
-        }
-    }
-
-    private fun normalizeRawFreqFloat(raw: Float): Float? {
-        return when {
-            raw in 87.5f..108.0f -> ((raw * 10f).roundToInt() / 10f)
-            raw in 875f..1080f -> ((raw).roundToInt() / 10f)
-            raw in 8750f..10800f -> ((raw / 10f).roundToInt() / 10f)
-            raw in 87500f..108000f -> ((raw / 100f).roundToInt() / 10f)
             else -> null
         }
     }
@@ -599,6 +630,8 @@ class NwdRadioController(private val context: Context) {
         appendLine("- Bound to RadioService: $isBound (Binder alive: ${radioBinder?.isBinderAlive == true})")
         appendLine("- IBinder Descriptor: ${binderDescriptor.ifEmpty { "(None / Not yet bound)" }}")
         appendLine("- AIDL Proxy Class: ${radioAidlProxy?.javaClass?.name ?: "(None)"}")
+        appendLine("- Last Frequency Object Dump: $lastFrequencyObjectDump")
+        appendLine("- Last Broadcast Received: $lastReceivedBroadcastInfo")
         if (proxyMethods.isNotEmpty()) {
             appendLine("- Discovered AIDL Proxy Methods (${proxyMethods.size}):")
             for (m in proxyMethods) {
@@ -606,7 +639,6 @@ class NwdRadioController(private val context: Context) {
                 appendLine("  • ${m.name}($params): ${m.returnType.simpleName}")
             }
         }
-        appendLine("- Last Broadcast Received: $lastReceivedBroadcastInfo")
     }
 
     fun cleanup() {
