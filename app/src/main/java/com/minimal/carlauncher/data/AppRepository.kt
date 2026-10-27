@@ -257,7 +257,83 @@ class AppRepository(private val context: Context) {
             val found = allApps.firstOrNull { it.packageName == customPkg }
             if (found != null) return found
         }
-        return allApps.firstOrNull { it.isMusic }
+        // Prefer dedicated music/streaming players over the FM radio app (since Radio has its own widget)
+        val nonRadioMusic = allApps.firstOrNull { app ->
+            app.isMusic && !isRadioApp(app.packageName, app.label, app.activityName)
+        }
+        return nonRadioMusic ?: allApps.firstOrNull { it.isMusic }
+    }
+
+    fun isRadioApp(pkg: String, label: String = "", activityName: String = ""): Boolean {
+        val lp = pkg.lowercase()
+        val ll = label.lowercase()
+        val la = activityName.lowercase()
+        return lp.contains("radio") ||
+            lp.contains("fmradio") ||
+            lp.contains("tuner") ||
+            la.contains("radio") ||
+            ll == "radio" ||
+            ll == "fm radio" ||
+            ll.contains("radio")
+    }
+
+    fun launchRadioApp(allApps: List<AppInfo>): Boolean {
+        val explicitRadioPackages = listOf(
+            "com.nwd.radio",
+            "com.nwd.link.radio",
+            "com.qf.radio",
+            "com.allwinner.radio",
+            "com.allwinner.radio.app",
+            "com.softwinner.radio",
+            "com.ts.main.radio",
+            "com.ts.radio",
+            "com.forfan.radio",
+            "com.syu.radio",
+            "com.microntek.radio",
+            "com.yecon.fmradio",
+            "com.chaochuang.radio",
+            "com.android.fmradio",
+            "com.mediatek.fmradio",
+            "com.navimods.radio",
+            "com.navimods.radio_free"
+        )
+
+        // 1. Try explicit standalone radio packages
+        for (pkg in explicitRadioPackages) {
+            if (launchPackage(pkg)) return true
+        }
+
+        // 2. Try explicit radio activities in Junsun / Topway / Forfan multi-function suites
+        val explicitRadioActivities = listOf(
+            "com.ts.MainUI" to "com.ts.main.radio.RadioMainActivity",
+            "com.ts.MainUI" to "com.ts.main.radio.RadioActivity",
+            "com.forfan.carassist" to "com.forfan.carassist.RadioActivity",
+            "com.nwd.radio" to "com.nwd.radio.MainActivity",
+            "com.nwd.radio" to "com.nwd.radio.RadioActivity"
+        )
+        for ((pkg, act) in explicitRadioActivities) {
+            try {
+                val intent = Intent(Intent.ACTION_MAIN).apply {
+                    component = ComponentName(pkg, act)
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+                if (intent.resolveActivity(packageManager) != null) {
+                    context.startActivity(intent)
+                    return true
+                }
+            } catch (e: Throwable) {}
+        }
+
+        // 3. Fallback: Search discovered launcher activities for any radio / tuner app
+        val radioCandidate = allApps.firstOrNull { app ->
+            isRadioApp(app.packageName, app.label, app.activityName) &&
+                !app.packageName.lowercase().contains("setting")
+        }
+        if (radioCandidate != null && launchApp(radioCandidate)) {
+            return true
+        }
+
+        return false
     }
 
     fun getCustomDvrPackage(): String? = prefs.getString(KEY_CUSTOM_DVR_PACKAGE, null)

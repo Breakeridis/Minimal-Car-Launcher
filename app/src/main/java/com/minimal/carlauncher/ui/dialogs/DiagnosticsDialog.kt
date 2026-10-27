@@ -713,6 +713,33 @@ private fun PackagesTabContent(packages: List<PackageDiagnosticInfo>) {
                             color = TextSecondary
                         )
                     }
+
+                    if (pkg.manifestActions.isNotEmpty()) {
+                        Text(
+                            text = "Manifest Actions (${pkg.manifestActions.size}): ${pkg.manifestActions.joinToString(", ")}",
+                            fontSize = 10.sp,
+                            fontFamily = FontFamily.Monospace,
+                            color = AccentGreen
+                        )
+                    }
+
+                    if (pkg.codeActions.isNotEmpty()) {
+                        Text(
+                            text = "DEX Actions (${pkg.codeActions.size}): ${pkg.codeActions.joinToString(", ")}",
+                            fontSize = 10.sp,
+                            fontFamily = FontFamily.Monospace,
+                            color = AccentAmber
+                        )
+                    }
+
+                    if (pkg.codeKeys.isNotEmpty()) {
+                        Text(
+                            text = "DEX Keys (${pkg.codeKeys.size}): ${pkg.codeKeys.joinToString(", ")}",
+                            fontSize = 10.sp,
+                            fontFamily = FontFamily.Monospace,
+                            color = AccentCyan
+                        )
+                    }
                 }
             }
         }

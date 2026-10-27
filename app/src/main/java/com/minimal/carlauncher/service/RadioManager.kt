@@ -11,6 +11,7 @@ import android.os.Build
 import android.os.Handler
 import android.os.HandlerThread
 import android.os.Looper
+import android.os.SystemClock
 import android.provider.Settings
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -56,12 +57,32 @@ class RadioManager(private val context: Context) {
         "com.nwd.link.radio",
         "com.allwinner.radio",
         "com.allwinner.radio.app",
+        "com.softwinner.radio",
         "com.qf.radio",
+        "com.ts.MainUI",
+        "com.ts.main.radio",
+        "com.ts.radio",
+        "com.forfan.carassist",
+        "com.forfan.radio",
+        "com.syu.radio",
+        "com.microntek.radio",
+        "com.yecon.fmradio",
+        "com.chaochuang.radio",
         "com.android.fmradio",
         "com.mediatek.fmradio",
-        "com.ts.radio",
-        "com.syu.radio"
+        "com.navimods.radio"
     )
+
+    // Dynamically discovered keys/actions from installed vendor radio APKs (via RadioApkAnalyzer)
+    private val discoveredSettingsKeys = java.util.concurrent.CopyOnWriteArraySet<String>()
+    private val discoveredPropertyKeys = java.util.concurrent.CopyOnWriteArraySet<String>()
+    private val discoveredProviderAuthorities = java.util.concurrent.CopyOnWriteArraySet<String>()
+    private val discoveredNextActions = java.util.concurrent.CopyOnWriteArraySet<String>()
+    private val discoveredPrevActions = java.util.concurrent.CopyOnWriteArraySet<String>()
+    private val discoveredTuneActions = java.util.concurrent.CopyOnWriteArraySet<String>()
+    private val discoveredFreqExtraKeys = java.util.concurrent.CopyOnWriteArraySet<String>()
+    @Volatile
+    private var isDynamicApkReceiverRegistered = false
 
     // Comprehensive QF, Allwinner, NWD, and generic automotive Settings keys
     private val observedSettingsKeys = listOf(
@@ -204,6 +225,16 @@ class RadioManager(private val context: Context) {
         }
     }
 
+    private val dynamicApkReceiver = object : BroadcastReceiver() {
+        override fun onReceive(ctx: Context?, intent: Intent?) {
+            if (intent == null) return
+            val isLauncher = intent.getBooleanExtra("is_launcher_source", false)
+            DiagnosticsManager.logIntent(intent, isIncoming = !isLauncher)
+            if (isLauncher) return
+            extractFromIntent(intent)
+        }
+    }
+
     init {
         activeInstance = WeakReference(this)
     }
@@ -260,6 +291,13 @@ class RadioManager(private val context: Context) {
             e.printStackTrace()
         }
 
+        if (isDynamicApkReceiverRegistered) {
+            try {
+                context.unregisterReceiver(dynamicApkReceiver)
+            } catch (e: Exception) {}
+            isDynamicApkReceiverRegistered = false
+        }
+
         try {
             bgThread.quitSafely()
         } catch (e: Exception) {}
@@ -290,8 +328,10 @@ class RadioManager(private val context: Context) {
                 }
             }
 
-            // 1. Check known Settings.System keys
-            for (key in observedSettingsKeys) {
+            val allSettingsKeys = observedSettingsKeys + discoveredSettingsKeys
+
+            // 1. Check known + APK-discovered Settings.System keys
+            for (key in allSettingsKeys) {
                 try {
                     val v = Settings.System.getString(resolver, key)
                     if (!v.isNullOrBlank() && v != "0" && v != "-1" && !v.equals("null", ignoreCase = true)) {
@@ -307,7 +347,7 @@ class RadioManager(private val context: Context) {
 
             // 2. Fallback: Check Settings.Global
             if (freqVal.isNullOrBlank()) {
-                for (key in observedSettingsKeys) {
+                for (key in allSettingsKeys) {
                     try {
                         val v = Settings.Global.getString(resolver, key)
                         if (!v.isNullOrBlank() && v != "0" && v != "-1" && !v.equals("null", ignoreCase = true)) {
@@ -324,7 +364,7 @@ class RadioManager(private val context: Context) {
 
             // 3. Fallback: Check Settings.Secure
             if (freqVal.isNullOrBlank()) {
-                for (key in observedSettingsKeys) {
+                for (key in allSettingsKeys) {
                     try {
                         val v = Settings.Secure.getString(resolver, key)
                         if (!v.isNullOrBlank() && v != "0" && v != "-1" && !v.equals("null", ignoreCase = true)) {
@@ -351,7 +391,8 @@ class RadioManager(private val context: Context) {
 
             // 5. Fallback: Check SystemProperties via reflection
             if (freqVal.isNullOrBlank()) {
-                for (prop in systemPropertyKeys) {
+                val allPropKeys = systemPropertyKeys + discoveredPropertyKeys
+                for (prop in allPropKeys) {
                     val pVal = readSystemProperty(prop)
                     if (!pVal.isNullOrBlank() && pVal != "0" && pVal != "-1") {
                         if (formatFrequency(pVal, null, null) != null) {
@@ -519,14 +560,23 @@ class RadioManager(private val context: Context) {
     }
 
     private fun scanContentProviders(): Triple<String, String?, String?>? {
-        val candidateUris = listOf(
+        val dynamicProviderUris = discoveredProviderAuthorities.flatMap { auth ->
+            listOf(
+                "content://$auth",
+                "content://$auth/info",
+                "content://$auth/status",
+                "content://$auth/cur_freq",
+                "content://$auth/radio"
+            )
+        }
+        val candidateUris = (listOf(
             "content://com.nwd.radio/info",
             "content://com.nwd.radio.provider/status",
             "content://com.nwd.radio/status",
             "content://com.nwd.radio/cur_freq",
             "content://com.qf.radio/info",
             "content://com.allwinner.radio/info"
-        )
+        ) + dynamicProviderUris).distinct()
         for (uriStr in candidateUris) {
             try {
                 val uri = Uri.parse(uriStr)
@@ -614,11 +664,11 @@ class RadioManager(private val context: Context) {
                 for (pkg in installed) {
                     val pName = pkg.packageName.lowercase()
                     // Strictly isolate to genuine radio tuner packages; NEVER match general system / carkit / settings
-                    val isRadioPackage = (pName.contains("radio") || pName.contains("fmradio") || pName.contains("tuner")) &&
+                    val isRadioPackage = ((pName.contains("radio") || pName.contains("fmradio") || pName.contains("tuner")) &&
                             !pName.contains("setting") && !pName.contains("carkit") && !pName.contains("can") &&
                             !pName.contains("mcu") && !pName.contains("camera") && !pName.contains("dvr") &&
                             !pName.contains("bluetooth") && !pName.contains("bt") && !pName.contains("wifi") &&
-                            !pName.contains("system")
+                            !pName.contains("system")) || pName == "com.ts.mainui" || pName == "com.forfan.carassist"
                     if (isRadioPackage) {
                         pkg.receivers?.forEach { r ->
                             val rName = r.name.lowercase()
@@ -633,6 +683,78 @@ class RadioManager(private val context: Context) {
                     cachedDynamicReceivers.addAll(recs)
                     hasCachedTargets = true
                 }
+
+                // Deep-inspect installed radio APKs (AndroidManifest.xml + classes.dex/.vdex)
+                val apkAnalyses = RadioApkAnalyzer.analyzeInstalledRadioPackages(context)
+                val broadcastActionsToSubscribe = LinkedHashSet<String>()
+
+                for (analysis in apkAnalyses) {
+                    discoveredProviderAuthorities.addAll(analysis.providerAuthorities)
+
+                    val allActions = (analysis.receiverActions + analysis.codeActions).distinct()
+                    for (act in allActions) {
+                        val lower = act.lowercase()
+                        broadcastActionsToSubscribe.add(act)
+
+                        if (lower.contains("next") || lower.contains("seek_up") || lower.contains("step_up") ||
+                            lower.contains("tune_up") || lower.contains("channel_up") || lower.contains("search_up")
+                        ) {
+                            discoveredNextActions.add(act)
+                        }
+                        if (lower.contains("prev") || lower.contains("seek_down") || lower.contains("step_down") ||
+                            lower.contains("tune_down") || lower.contains("channel_down") || lower.contains("search_down")
+                        ) {
+                            discoveredPrevActions.add(act)
+                        }
+                        if (lower.contains("set_freq") || lower.contains("tune") || lower.contains("preset") ||
+                            lower.contains("collect") || lower.contains("cmd") || lower.contains("command") ||
+                            lower.contains("action") || lower.contains("freq")
+                        ) {
+                            discoveredTuneActions.add(act)
+                        }
+                    }
+
+                    for (key in analysis.codeKeys) {
+                        val lower = key.lowercase()
+                        if (BLACKLISTED_TOKENS.any { lower.contains(it) }) continue
+                        if (lower.startsWith("persist.") || lower.startsWith("sys.") || lower.startsWith("ro.")) {
+                            discoveredPropertyKeys.add(key)
+                        } else {
+                            discoveredSettingsKeys.add(key)
+                            if (lower.contains("freq") || lower.contains("channel")) {
+                                discoveredFreqExtraKeys.add(key)
+                            }
+                        }
+                    }
+                }
+
+                if (broadcastActionsToSubscribe.isNotEmpty()) {
+                    mainHandler.post {
+                        try {
+                            if (isDynamicApkReceiverRegistered) {
+                                try { context.unregisterReceiver(dynamicApkReceiver) } catch (e: Throwable) {}
+                                isDynamicApkReceiverRegistered = false
+                            }
+                            val dynFilter = IntentFilter().apply {
+                                broadcastActionsToSubscribe.forEach { addAction(it) }
+                            }
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                                context.registerReceiver(dynamicApkReceiver, dynFilter, Context.RECEIVER_EXPORTED)
+                            } else {
+                                context.registerReceiver(dynamicApkReceiver, dynFilter)
+                            }
+                            isDynamicApkReceiverRegistered = true
+                        } catch (e: Throwable) {}
+                    }
+                }
+
+                if (apkAnalyses.isNotEmpty()) {
+                    DiagnosticsManager.logRadioAction(
+                        "APK_INSPECTOR",
+                        "Inspected ${apkAnalyses.size} radio APK(s): ${broadcastActionsToSubscribe.size} actions, ${discoveredSettingsKeys.size} keys"
+                    )
+                    readCurrentSettingsFrequency()
+                }
             } catch (e: Throwable) {}
         }
     }
@@ -641,7 +763,7 @@ class RadioManager(private val context: Context) {
         val recs = getDynamicRadioReceivers()
         val pkgs = recs.map { it.packageName }.distinct()
         val freq = _radioStation.value ?: "None"
-        return "Radio: $freq | Detected: ${if (pkgs.isEmpty()) "None" else pkgs.joinToString()} (${recs.size} receivers)"
+        return "Radio: $freq | Detected: ${if (pkgs.isEmpty()) "None" else pkgs.joinToString()} (${recs.size} receivers, ${discoveredTuneActions.size} APK actions)"
     }
 
     private fun getDynamicRadioReceivers(): List<ComponentName> {
@@ -652,6 +774,29 @@ class RadioManager(private val context: Context) {
         }
         warmUpDynamicTargets()
         return emptyList()
+    }
+
+    /**
+     * Notifies Nowada (NWD) firmware that the radio audio channel (AppID 8) should be active.
+     */
+    fun notifyNwdRadioAudioActive() {
+        val appInOutActions = listOf(
+            "com.nwd.action.ACTION_APP_IN_OUT",
+            "ACTION_APP_IN_OUT"
+        )
+        for (act in appInOutActions) {
+            try {
+                val intent = Intent(act).apply {
+                    putExtra("AppID", 8)
+                    putExtra("app_id", 8)
+                    putExtra("appId", 8)
+                    putExtra("state", 1)
+                    putExtra("in_out", 1)
+                    putExtra("is_launcher_source", true)
+                }
+                context.sendBroadcast(intent)
+            } catch (e: Throwable) {}
+        }
     }
 
     /**
@@ -671,7 +816,7 @@ class RadioManager(private val context: Context) {
     /**
      * Comprehensive multi-tier command dispatcher for NWD K2401P, QF, Allwinner and generic automotive units.
      * Combines Shell input key injection, AudioManager media/channel key events, explicit component broadcasts,
-     * explicit service start commands, and multi-format (Int & String) NWD IPC commands.
+     * APK-discovered receiver actions, and multi-format (Int & String) NWD IPC commands.
      */
     private fun dispatchRadioCommand(isNext: Boolean) {
         val primaryKeyCode = if (isNext) KeyEvent.KEYCODE_MEDIA_NEXT else KeyEvent.KEYCODE_MEDIA_PREVIOUS
@@ -681,6 +826,9 @@ class RadioManager(private val context: Context) {
 
         val keyCodes = listOf(primaryKeyCode, channelKeyCode, stepKeyCode, skipKeyCode)
 
+        // 0. Ensure NWD radio audio channel is awake
+        notifyNwdRadioAudioActive()
+
         // 1. Direct Shell Input Key Injection (Global on Android automotive ROMs)
         for (code in listOf(primaryKeyCode, channelKeyCode)) {
             try {
@@ -688,24 +836,26 @@ class RadioManager(private val context: Context) {
             } catch (e: Throwable) {}
         }
 
-        // 2. Dispatch Media & Channel Key Events to Audio System
+        // 2. Dispatch Media & Channel Key Events to Audio System with valid uptimeMillis timestamps
         try {
             val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as? android.media.AudioManager
+            val now = SystemClock.uptimeMillis()
             for (code in keyCodes) {
-                audioManager?.dispatchMediaKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, code))
-                audioManager?.dispatchMediaKeyEvent(KeyEvent(KeyEvent.ACTION_UP, code))
+                audioManager?.dispatchMediaKeyEvent(KeyEvent(now, now, KeyEvent.ACTION_DOWN, code, 0))
+                audioManager?.dispatchMediaKeyEvent(KeyEvent(now, now, KeyEvent.ACTION_UP, code, 0))
             }
         } catch (e: Throwable) {}
 
         // 3. ACTION_MEDIA_BUTTON Broadcasts (Both ordered global and package-targeted)
+        val eventTime = SystemClock.uptimeMillis()
         for (code in keyCodes) {
             try {
                 val downIntent = Intent(Intent.ACTION_MEDIA_BUTTON).apply {
-                    putExtra(Intent.EXTRA_KEY_EVENT, KeyEvent(KeyEvent.ACTION_DOWN, code))
+                    putExtra(Intent.EXTRA_KEY_EVENT, KeyEvent(eventTime, eventTime, KeyEvent.ACTION_DOWN, code, 0))
                     addFlags(Intent.FLAG_RECEIVER_FOREGROUND)
                 }
                 val upIntent = Intent(Intent.ACTION_MEDIA_BUTTON).apply {
-                    putExtra(Intent.EXTRA_KEY_EVENT, KeyEvent(KeyEvent.ACTION_UP, code))
+                    putExtra(Intent.EXTRA_KEY_EVENT, KeyEvent(eventTime, eventTime, KeyEvent.ACTION_UP, code, 0))
                     addFlags(Intent.FLAG_RECEIVER_FOREGROUND)
                 }
                 context.sendOrderedBroadcast(downIntent, null)
@@ -724,7 +874,8 @@ class RadioManager(private val context: Context) {
         val allTargetPackages = (radioPackages + dynamicReceivers.map { it.packageName })
             .filter { pkg ->
                 val p = pkg.lowercase()
-                (p.contains("radio") || p.contains("fm")) && !p.contains("setting") && !p.contains("carkit") && !p.contains("can") && !p.contains("mcu")
+                ((p.contains("radio") || p.contains("fm")) && !p.contains("setting") && !p.contains("carkit") && !p.contains("can") && !p.contains("mcu")) ||
+                    p == "com.ts.mainui" || p == "com.forfan.carassist"
             }
             .distinct()
 
@@ -735,35 +886,53 @@ class RadioManager(private val context: Context) {
             listOf("prev", "seek_prev", "seek_down", "tune_down", "step_down", "channel_down", "down", "search_down", "backward")
         }
 
-        val specificActions = if (isNext) {
+        val specificActions = (if (isNext) {
             listOf(
                 "com.nwd.radio.next",
                 "com.nwd.radio.tune_up",
                 "com.nwd.radio.seek_up",
                 "com.nwd.radio.step_up",
+                "com.nwd.radio.ACTION_NEXT",
+                "com.nwd.radio.ACTION_SEEK_UP",
+                "com.nwd.radio.widget.NEXT",
                 "com.nwd.link.radio.next",
                 "com.qf.action.RADIO_NEXT",
                 "com.qf.action.KEY_NEXT",
+                "com.qf.radio.next",
+                "com.qf.radio.seek_up",
+                "/customize/radio/next",
+                "/customize/radio/seek_up",
+                "/customize/radio/step_up",
                 "com.allwinner.radio.next",
                 "com.allwinner.radio.ACTION_NEXT",
+                "com.ts.main.radio.NEXT",
                 "android.intent.action.NEXT"
-            )
+            ) + discoveredNextActions
         } else {
             listOf(
                 "com.nwd.radio.prev",
                 "com.nwd.radio.tune_down",
                 "com.nwd.radio.seek_down",
                 "com.nwd.radio.step_down",
+                "com.nwd.radio.ACTION_PREV",
+                "com.nwd.radio.ACTION_SEEK_DOWN",
+                "com.nwd.radio.widget.PREV",
                 "com.nwd.link.radio.prev",
                 "com.qf.action.RADIO_PREV",
                 "com.qf.action.KEY_PREV",
+                "com.qf.radio.prev",
+                "com.qf.radio.seek_down",
+                "/customize/radio/prev",
+                "/customize/radio/seek_down",
+                "/customize/radio/step_down",
                 "com.allwinner.radio.prev",
                 "com.allwinner.radio.ACTION_PREV",
+                "com.ts.main.radio.PREV",
                 "android.intent.action.PREV"
-            )
-        }
+            ) + discoveredPrevActions
+        }).distinct()
 
-        val commonActions = listOf(
+        val commonActions = (listOf(
             "com.nwd.action.ACTION_SEND_RADIO_COMMAND",
             "com.nwd.action.ACTION_RADIO_CMD",
             "com.nwd.radio.action",
@@ -776,7 +945,7 @@ class RadioManager(private val context: Context) {
             "com.allwinner.radio.action",
             "com.microntek.sync",
             "com.syu.radio"
-        )
+        ) + discoveredTuneActions).distinct()
 
         val intentsToSend = mutableListOf<Intent>()
 
@@ -876,42 +1045,64 @@ class RadioManager(private val context: Context) {
             if (freqDouble < 200.0) (freqDouble * 100.0).roundToInt() else (freqDouble / 10.0).roundToInt()
         } else null
 
+        notifyNwdRadioAudioActive()
+
         val intents = mutableListOf<Intent>()
+
+        fun Intent.putAllFreqExtras(): Intent = apply {
+            putExtra("freq", numStr)
+            putExtra("cur_freq", numStr)
+            putExtra("nwd_freq", numStr)
+            putExtra("nwd_radio_freq", numStr)
+            if (freqDouble != null) {
+                putExtra("frequency", freqDouble)
+                putExtra("radio_freq", freqDouble)
+            }
+            if (freqKHz != null) {
+                putExtra("freq_khz", freqKHz)
+                putExtra("cur_freq_khz", freqKHz)
+            }
+            if (freq10KHz != null) {
+                putExtra("extra_freq", freq10KHz)
+                putExtra("extra_radio_frequence", freq10KHz)
+                putExtra("extra_radio_freq", freq10KHz)
+            }
+            for (extraKey in discoveredFreqExtraKeys) {
+                if (freq10KHz != null) putExtra(extraKey, freq10KHz)
+            }
+        }
 
         // 1. Direct Frequency Tune Intents
         if (numStr.isNotBlank()) {
             intents.add(Intent("com.nwd.action.ACTION_SEND_RADIO_COMMAND").apply {
                 putExtra("command", "set_freq")
                 putExtra("cmd", "set_freq")
-                putExtra("freq", numStr)
-                if (freqDouble != null) putExtra("frequency", freqDouble)
-                if (freqKHz != null) putExtra("freq_khz", freqKHz)
-                if (freq10KHz != null) putExtra("extra_freq", freq10KHz)
+                putAllFreqExtras()
             })
             intents.add(Intent("com.nwd.action.ACTION_SEND_RADIO_COMMAND").apply {
                 putExtra("command", 14) // SET_FREQ opcode in NWD MCU
                 putExtra("cmd", 14)
-                putExtra("freq", numStr)
-                if (freqDouble != null) putExtra("frequency", freqDouble)
-                if (freqKHz != null) putExtra("freq_khz", freqKHz)
-                if (freq10KHz != null) putExtra("extra_freq", freq10KHz)
+                putAllFreqExtras()
             })
-            intents.add(Intent("com.nwd.radio.set_freq").apply {
-                putExtra("freq", numStr)
-                if (freqKHz != null) putExtra("freq_khz", freqKHz)
-            })
-            intents.add(Intent("com.nwd.action.ACTION_SET_FREQ").apply {
-                putExtra("freq", numStr)
-                putExtra("frequency", numStr)
-            })
+            intents.add(Intent("com.nwd.radio.set_freq").putAllFreqExtras())
+            intents.add(Intent("com.nwd.action.ACTION_SET_FREQ").putAllFreqExtras())
             intents.add(Intent("com.qf.radio.action").apply {
                 putExtra("action", "set_freq")
-                putExtra("freq", numStr)
-                if (freqKHz != null) putExtra("freq_khz", freqKHz)
+                putAllFreqExtras()
             })
-            intents.add(Intent("com.allwinner.radio.set_freq").apply {
-                putExtra("freq", numStr)
-            })
+            intents.add(Intent("/customize/radio/set_freq").putAllFreqExtras())
+            intents.add(Intent("com.allwinner.radio.set_freq").putAllFreqExtras())
+            intents.add(Intent("com.ts.main.radio.SET_FREQ").putAllFreqExtras())
+
+            // APK-discovered tune/receiver actions
+            for (discAct in discoveredTuneActions) {
+                intents.add(Intent(discAct).apply {
+                    putExtra("command", "set_freq")
+                    putExtra("cmd", 14)
+                    putAllFreqExtras()
+                })
+            }
+
             // Deep links
             intents.add(Intent(Intent.ACTION_VIEW, Uri.parse("radio://$numStr")))
             intents.add(Intent(Intent.ACTION_VIEW, Uri.parse("radio://tune?freq=$numStr")))
@@ -926,12 +1117,14 @@ class RadioManager(private val context: Context) {
                 putExtra("preset", pNum)
                 putExtra("collect", pNum)
                 putExtra("index", presetIndex)
+                if (numStr.isNotBlank()) putAllFreqExtras()
             })
             intents.add(Intent("com.nwd.action.ACTION_SEND_RADIO_COMMAND").apply {
                 putExtra("command", "collect")
                 putExtra("cmd", "collect")
                 putExtra("index", presetIndex)
                 putExtra("preset", pNum)
+                if (numStr.isNotBlank()) putAllFreqExtras()
             })
             intents.add(Intent("com.nwd.action.ACTION_SEND_RADIO_COMMAND").apply {
                 putExtra("command", 13) // COLLECT opcode
@@ -939,14 +1132,17 @@ class RadioManager(private val context: Context) {
                 putExtra("preset", pNum)
                 putExtra("collect", pNum)
                 putExtra("index", presetIndex)
+                if (numStr.isNotBlank()) putAllFreqExtras()
             })
             intents.add(Intent("com.nwd.radio.preset").apply {
                 putExtra("index", presetIndex)
                 putExtra("preset", pNum)
+                if (numStr.isNotBlank()) putAllFreqExtras()
             })
             intents.add(Intent("com.qf.radio.action").apply {
                 putExtra("action", "select_preset")
                 putExtra("index", presetIndex)
+                if (numStr.isNotBlank()) putAllFreqExtras()
             })
         }
 
@@ -954,7 +1150,8 @@ class RadioManager(private val context: Context) {
         val allTargetPackages = (radioPackages + dynamicReceivers.map { it.packageName })
             .filter { pkg ->
                 val p = pkg.lowercase()
-                (p.contains("radio") || p.contains("fm")) && !p.contains("setting") && !p.contains("carkit") && !p.contains("can") && !p.contains("mcu")
+                ((p.contains("radio") || p.contains("fm")) && !p.contains("setting") && !p.contains("carkit") && !p.contains("can") && !p.contains("mcu")) ||
+                    p == "com.ts.mainui" || p == "com.forfan.carassist"
             }
             .distinct()
 

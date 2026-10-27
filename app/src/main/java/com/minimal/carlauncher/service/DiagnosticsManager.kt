@@ -43,7 +43,10 @@ data class PackageDiagnosticInfo(
     val versionName: String,
     val versionCode: Long,
     val receivers: List<String>,
-    val services: List<String>
+    val services: List<String>,
+    val manifestActions: List<String> = emptyList(),
+    val codeActions: List<String> = emptyList(),
+    val codeKeys: List<String> = emptyList()
 )
 
 data class SystemDiagnosticInfo(
@@ -244,10 +247,16 @@ object DiagnosticsManager {
             "com.microntek.radio",
             "com.allwinner.radio",
             "com.softwinner.radio",
+            "com.ts.MainUI",
             "com.ts.main.radio",
+            "com.ts.radio",
+            "com.forfan.carassist",
+            "com.forfan.radio",
             "com.yecon.fmradio",
             "com.android.fmradio",
-            "com.chaochuang.radio"
+            "com.mediatek.fmradio",
+            "com.chaochuang.radio",
+            "com.navimods.radio"
         )
 
         val uniquePkgs = (candidatePkgs.map { it.packageName } + explicitPackages).distinct()
@@ -270,6 +279,8 @@ object DiagnosticsManager {
                     pkgInfo.versionCode.toLong()
                 }
 
+                val apkAnalysis = RadioApkAnalyzer.analyzePackage(context, pkg)
+
                 results.add(PackageDiagnosticInfo(
                     label = label,
                     packageName = pkg,
@@ -277,7 +288,10 @@ object DiagnosticsManager {
                     versionName = pkgInfo.versionName ?: "N/A",
                     versionCode = vCode,
                     receivers = receivers,
-                    services = services
+                    services = services,
+                    manifestActions = apkAnalysis?.let { (it.receiverActions + it.serviceActions).distinct() } ?: emptyList(),
+                    codeActions = apkAnalysis?.codeActions ?: emptyList(),
+                    codeKeys = apkAnalysis?.codeKeys ?: emptyList()
                 ))
             } catch (e: Throwable) {
                 // Package not installed
@@ -378,6 +392,15 @@ object DiagnosticsManager {
                 }
                 if (p.services.isNotEmpty()) {
                     appendLine("  • Services (${p.services.size}): ${p.services.joinToString(", ")}")
+                }
+                if (p.manifestActions.isNotEmpty()) {
+                    appendLine("  • Manifest Intent Actions (${p.manifestActions.size}): ${p.manifestActions.joinToString(", ")}")
+                }
+                if (p.codeActions.isNotEmpty()) {
+                    appendLine("  • DEX Action Strings (${p.codeActions.size}): ${p.codeActions.joinToString(", ")}")
+                }
+                if (p.codeKeys.isNotEmpty()) {
+                    appendLine("  • DEX Radio Keys (${p.codeKeys.size}): ${p.codeKeys.joinToString(", ")}")
                 }
             }
         }

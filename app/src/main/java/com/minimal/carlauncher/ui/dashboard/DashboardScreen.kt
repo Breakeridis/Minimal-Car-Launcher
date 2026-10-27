@@ -116,7 +116,7 @@ fun DashboardScreen(
                     onTuneNext = { viewModel.tuneNextStation() },
                     onSelectSavedStation = { station, index -> viewModel.tuneToSavedStation(station, index) },
                     onSaveCurrentStation = { index -> viewModel.saveCurrentStationToPreset(index) },
-                    onLaunchRadio = { viewModel.launchMusic() },
+                    onLaunchRadio = { viewModel.launchRadio() },
                     onShowDiagnostic = { viewModel.showRadioDiagnostic() },
                     modifier = Modifier
                         .fillMaxWidth()

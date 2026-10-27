@@ -502,33 +502,31 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
         repository.launchNavigationToCoordinates(latitude, longitude)
     }
 
-    fun launchMusic() {
-        val currentStation = radioStation.value
-        val radioPkgs = listOf(
-            "com.nwd.radio",
-            "com.nwd.link.radio",
-            "com.android.fmradio",
-            "com.allwinner.radio",
-            "com.qf.radio",
-            "com.navimods.radio"
-        )
-        // If radio station is active, prioritize launching native headunit radio app
-        if (!currentStation.isNullOrBlank()) {
-            for (pkg in radioPkgs) {
-                if (repository.launchPackage(pkg)) return
-            }
+    fun launchRadio() {
+        radioManager.notifyNwdRadioAudioActive()
+        if (!repository.launchRadioApp(_allApps.value)) {
+            openAppDrawer()
         }
+    }
 
+    fun launchMusic() {
         val music = _musicApp.value
-        if (music != null) {
-            repository.launchApp(music)
-        } else {
-            for (pkg in radioPkgs) {
-                if (repository.launchPackage(pkg)) return
-            }
-            if (!repository.launchPackage("com.spotify.music")) {
-                openAppDrawer()
-            }
+        if (music != null && repository.launchApp(music)) {
+            return
+        }
+        val streamingFallbacks = listOf(
+            "com.spotify.music",
+            "com.google.android.apps.youtube.music",
+            "com.apple.android.music",
+            "com.amazon.mp3",
+            "deezer.android.app",
+            "com.soundcloud.android"
+        )
+        for (pkg in streamingFallbacks) {
+            if (repository.launchPackage(pkg)) return
+        }
+        if (!repository.launchRadioApp(_allApps.value)) {
+            openAppDrawer()
         }
     }
 
@@ -577,6 +575,7 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
     fun showRadioDiagnostic() {
         val info = radioManager.getRadioDiagnosticInfo()
         Toast.makeText(getApplication(), info, Toast.LENGTH_LONG).show()
+        openDiagnosticsDialog()
     }
 
     override fun onCleared() {
