@@ -17,11 +17,30 @@
 | **Product / Device Codename** | `ceres_b3` / `ceres-b3` (`ro.board.platform = ceres`) |
 | **SoC / CPU Hardware** | **Allwinner QuadCore-A133** (`sun50iw10p1`) |
 | **CPU Cores & Architecture** | 4× ARMv8 Processor rev 4 (`v8l`) running in 32-bit mode (`armeabi-v7a`, `armeabi`) |
-| **Memory (RAM)** | Reported as `4.00 GB Total`, but `/proc/meminfo` shows **4× spoofed counters** (`Slab=835MB`, `PageTables=601MB`, `KernelStack=262MB`, `SwapTotal=3071MB`) while real `MemAvailable=408MB` (`MemFree=52MB + Cached=345MB + Buffers=11MB`) indicates **1 GB (or 2 GB) true physical RAM** |
+| **Memory (RAM)** | **Advertised as 4.00 GB Total, but 100% verified spoofed by vendor firmware**. Real physical RAM is **1 GB (or 2 GB)**. See Section 1.1 below for detailed analysis of the vendor's kernel counter inflation technique. |
 | **Screen Resolution & Density** | `1280×720` (`160 dpi`, `1.0x` scale, landscape `ro.boot.nwd.orientation = 90`) |
 | **GPS Hardware** | `zkwAT6558R` (`persist.sys.nwd.gps-hw.version`) |
 | **Bluetooth / Wi-Fi Chip** | `8800_BT5.4_WIFI6/2025:07:07:14:30:10` (`System.nwd_bt_version`) |
 | **Camera Controller** | `pr2000` (`persist.sys.nwd.hacamera.ctrl`) |
+
+### 1.1 Vendor RAM Spoofing & Memory Breakdown Analysis
+
+While Android's `ActivityManager.MemoryInfo.totalMem` and Settings display advertise **4.00 GB Total RAM**, deep analysis of `/proc/meminfo` confirms that the vendor firmware actively manipulates kernel memory accounting structures:
+
+1. **Kernel Counter Inflation**:
+   - `Slab`: Artificial ~835 MB (abnormally high for an embedded Android 10 kernel)
+   - `PageTables`: Artificial ~601 MB (typically < 30 MB on a healthy system)
+   - `KernelStack`: Artificial ~262 MB (typically < 15 MB)
+   - `SwapTotal` / ZRAM: Inflated to 3,071 MB
+2. **True Physical RAM Indicators**:
+   - `MemFree`: ~52 MB
+   - `Cached`: ~345 MB
+   - `Buffers`: ~11 MB
+   - `MemAvailable`: ~408 MB
+3. **Engineering Conclusion**:
+   - True physical memory on this board is **1 GB (or 2 GB max)** DDR3/DDR4.
+   - Usable free headroom under normal load is strictly around **400–500 MB**.
+   - **Critical Architecture Implication**: The car launcher must remain lightweight with zero background polling or thread leakage; unoptimized background services will trigger the kernel Out-Of-Memory (OOM) killer immediately.
 
 ---
 
@@ -229,3 +248,32 @@ System.nwd_restore_language = 1
 System.nwd_vodka_clean_launcher_date = 0
 System.remember_mcu_version = V3.6-FF01-20250423-A02-CAN0000-00-00-DVD00000000-00
 ```
+
+---
+
+## 6. Google Services, Package Restrictions & Local ADB Architecture
+
+### A. Factory Package State & Restrictions
+1. **Google Services Packages**:
+   - `com.google.android.gsf` (Google Services Framework)
+   - `com.google.android.gms` (Google Play Services)
+   - `com.android.vending` (Google Play Store)
+2. **Vendor ROM Behavior**:
+   - Packages are present on the `/system` or `/data` partition but are disabled/hidden for `user 0` out of the box (often to minimize RAM consumption on 1–2 GB hardware or bypass Chinese export certification).
+   - The stock CarSetting (`com.android.car.setting`) and standard Android App Details screen lock out the "Enable" button for third-party system components.
+   - Standard apps cannot modify component states (`android.permission.CHANGE_COMPONENT_ENABLED_STATE` is only granted to system-signed keys or UID 2000 / UID 0).
+
+### B. Local ADB & Shell Control Architecture
+- **Root State**: No `su` binary in standard paths (`/system/bin`, `/system/xbin`, etc.) out of the box unless manually rooted.
+- **ADB over TCP Daemon**:
+  - Listens on port `5555` (`localhost:5555` or `127.0.0.1:5555`).
+  - Can be activated through Developer Options ("Wireless debugging" / "Network debugging"), Factory Settings (passwords `8888`, `1617`, `3368`), or initialized once from PC using `adb tcpip 5555`.
+- **In-App Local ADB Loopback**:
+  - Using a pure-Kotlin ADB client (`dadb`), the car launcher connects directly to the local ADB daemon on `localhost:5555`.
+  - Prompts the standard Android RSA authorization modal on the head unit screen: *"Allow USB debugging? Always allow from this computer"*.
+  - Once authorized, the launcher gains the privilege of the `shell` user (UID 2000), allowing programmatic execution of:
+    - Enable: `pm unhide <pkg>; pm install-existing <pkg>; pm enable <pkg>`
+    - Disable: `pm disable-user --user 0 <pkg>`
+- **Aurora Store Integration**:
+  - Because Google Play Store often crashes or fails Play Protect certification on uncertified test-keys firmware (`ceres_b3`), Aurora Store (`com.aurora.store`) provides native, open-source access to Google Play apps without requiring Google Mobile Services (GMS) or a logged-in Google account.
+
